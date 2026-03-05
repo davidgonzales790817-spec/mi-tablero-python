@@ -11,7 +11,7 @@ st.set_page_config(page_title="Tablero Presupuestal", layout="wide")  # Establec
 
 # Mostrar logo institucional en la barra lateral
 st.sidebar.image(
-    "https://blogger.googleusercontent.com/img/b/R29vZ2xl/AVvXsEjnfBaYRHfEIEGCd4z9kSvFFtjMekQ2ANpKE0SsZTPKB6tvu9Scpqsp5vt9znWnMCqRY5p32fWi5w9jLFgGq3MJHPR3USDTdvfG8hDQNeVscaCm66L6h4KydFg92sQ5FcRMDHsGRjgYD3I/s16000-rw/033+Despacho+Presidencial.jpg",
+    "https://www.ipen.gob.pe/templates/ipen/images/logo-ipen.png",
     width=250  # Establece el ancho del logo en la barra lateral.
 )
 
