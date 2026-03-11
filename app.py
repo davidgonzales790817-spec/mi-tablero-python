@@ -1,204 +1,306 @@
-import streamlit as st  # Importa la librería Streamlit para crear aplicaciones web interactivas.
-import pandas as pd  # Importa la librería Pandas para el manejo de datos tabulares.
-import plotly.graph_objects as go  # Importa la librería Plotly para crear gráficos personalizados.
-import plotly.express as px  # Importa la librería Plotly Express para crear gráficos de alto nivel.
-import os  # Importa el módulo os para interactuar con el sistema operativo (manejo de archivos y rutas).
-import shutil  # Importa el módulo shutil para operaciones de copia de archivos (no se usa en el código proporcionado, pero se incluyó en el prompt del usuario).
-from datetime import datetime  # Importa la clase datetime del módulo datetime para trabajar con fechas y horas.
+import streamlit as st
+import pandas as pd
+import plotly.graph_objects as go
+import plotly.express as px
+import os
+from datetime import datetime
+import re
 
-# Configuración de la página en Streamlit
-st.set_page_config(page_title="Tablero Presupuestal", layout="wide")  # Establece el título de la página y el diseño de la página en Streamlit.
+# Configuración de la página
+st.set_page_config(page_title="Tablero Presupuestal", layout="wide")
 
-# Mostrar logo institucional en la barra lateral
-st.sidebar.image(
-    "https://www.ipen.gob.pe/templates/ipen/images/logo-ipen.png",
-    width=250  # Establece el ancho del logo en la barra lateral.
-)
+# Logo institucional
+st.sidebar.image("https://www.ipen.gob.pe/templates/ipen/images/logo-ipen.png", width=250)
 
-# Cargar archivo desde la barra lateral
-st.sidebar.header("Cargar archivo Excel")  # Agrega un encabezado a la barra lateral para la carga de archivos.
-archivo = st.sidebar.file_uploader("Seleccionar archivo Excel", type=["xls", "xlsx"])  # Crea un widget para cargar archivos Excel en la barra lateral.
+# Cargar archivo
+st.sidebar.header("Cargar archivo Excel")
+archivo = st.sidebar.file_uploader("Seleccionar archivo Excel", type=["xls", "xlsx"])
 
-# Crear carpeta para respaldos si no existe
-carpeta_respaldo = "Respaldo_Data"  # Define el nombre de la carpeta donde se guardarán los archivos de respaldo.
-os.makedirs(carpeta_respaldo, exist_ok=True)  # Crea la carpeta si no existe; no genera error si ya existe.
+# Crear carpeta de respaldo
+carpeta_respaldo = "Respaldo_Data"
+os.makedirs(carpeta_respaldo, exist_ok=True)
 
-if archivo:  # Verifica si se ha cargado un archivo.
-    # Guardar archivo en carpeta de respaldo con su nombre original
-    ruta_archivo = os.path.join(carpeta_respaldo, archivo.name)  # Construye la ruta completa del archivo de respaldo.
-    with open(ruta_archivo, "wb") as f:  # Abre el archivo en modo escritura binaria ('wb') para guardar el contenido.
-        f.write(archivo.getbuffer())  # Escribe el contenido del archivo cargado en el archivo del sistema de archivos.
+if archivo:
+    # Guardar archivo
+    ruta_archivo = os.path.join(carpeta_respaldo, archivo.name)
+    with open(ruta_archivo, "wb") as f:
+        f.write(archivo.getbuffer())
 
-    try:  # Inicia un bloque try-except para manejar posibles errores al procesar el archivo.
-        # Leer archivo Excel y normalizar nombres de columnas
-        df = pd.read_excel(ruta_archivo)  # Lee el archivo Excel cargado en un DataFrame de Pandas.
-        df.columns = df.columns.str.strip().str.lower()  # Elimina espacios en blanco de los nombres de las columnas y los convierte a minúsculas para統一ar el formato.
+    try:
+        # Leer y normalizar nombres de columnas
+        df = pd.read_excel(ruta_archivo)
+        df.columns = df.columns.str.strip().str.lower()
 
-        # Definir columnas obligatorias
+        # Columnas obligatorias
         columnas_obligatorias = [
             "mto_pim", "mto_certificado", "mto_compro_anual"
-        ] + [f"mto_devenga_{str(i).zfill(2)}" for i in range(1, 13)]  # Define la lista de columnas que se esperan en el archivo Excel (mto_pim, mto_certificado, mto_compro_anual y mto_devenga_01 a mto_devenga_12).
+        ] + [f"mto_devenga_{str(i).zfill(2)}" for i in range(1, 13)]
 
-        # Verificar si faltan columnas obligatorias
-        columnas_faltantes = [col for col in columnas_obligatorias if col not in df.columns]  # Identifica las columnas que están en la lista de columnas_obligatorias pero no en el DataFrame df.
-        if columnas_faltantes:  # Si faltan columnas obligatorias, muestra un mensaje de error y detiene la ejecución.
+        # Verificar columnas faltantes
+        columnas_faltantes = [col for col in columnas_obligatorias if col not in df.columns]
+        if columnas_faltantes:
             st.error("❌ El archivo cargado no contiene todas las columnas necesarias.")
             st.write("Faltan las siguientes columnas:")
             for col in columnas_faltantes:
-                st.markdown(f"- `{col}`")  # Muestra cada columna faltante en formato markdown.
-            st.stop()  # Detiene la ejecución de la aplicación Streamlit.
+                st.markdown(f"- `{col}`")
+            st.stop()
 
-        # Verificar que columnas obligatorias sean numéricas
-        tipos_erroneos = [col for col in columnas_obligatorias if not pd.api.types.is_numeric_dtype(df[col])]  # Identifica las columnas que deberían ser numéricas pero no lo son.
-        if tipos_erroneos:  # Si hay columnas con tipos incorrectos, muestra una advertencia.
+        # Verificar tipos numéricos
+        tipos_erroneos = [col for col in columnas_obligatorias if not pd.api.types.is_numeric_dtype(df[col])]
+        if tipos_erroneos:
             st.warning("⚠️ Las siguientes columnas no tienen tipo numérico. Podría afectar los cálculos:")
             for col in tipos_erroneos:
-                st.markdown(f"- `{col}`")  # Muestra cada columna con tipo incorrecto en formato markdown.
+                st.markdown(f"- `{col}`")
 
-        # Renombrar columnas con nombres más descriptivos
-        renombres = {  # Define un diccionario para mapear los nombres de las columnas originales a nombres más descriptivos.
+        # Renombrar columnas
+        renombres = {
             "mto_pim": "Presupuesto Inicial (PIM)",
             "mto_certificado": "Certificado",
             "mto_compro_anual": "Compromiso Anual",
         }
-        for i in range(1, 13):  # Itera sobre los números de mes (1 al 12).
-            renombres[f"mto_devenga_{str(i).zfill(2)}"] = f"Devengado {datetime(2000, i, 1).strftime('%B')}"  # Crea nombres de columna para los meses (Ej: Devengado Enero, Devengado Febrero, etc.) usando el nombre del mes.
-        df.rename(columns=renombres, inplace=True)  # Renombra las columnas del DataFrame usando el diccionario renombres.
+        for i in range(1, 13):
+            renombres[f"mto_devenga_{str(i).zfill(2)}"] = f"Devengado {datetime(2000, i, 1).strftime('%B')}"
+        df.rename(columns=renombres, inplace=True)
 
-        # Calcular métricas clave
-        columnas_devengado = [col for col in df.columns if "Devengado" in col]  # Obtiene la lista de columnas que contienen información de devengado.
-        df["Devengado Total"] = df[columnas_devengado].sum(axis=1)  # Calcula el devengado total sumando los devengados de cada mes para cada fila.
-        df["Saldo Restante"] = df["Presupuesto Inicial (PIM)"] - df["Devengado Total"]  # Calcula el saldo restante del presupuesto restando el devengado total del presupuesto inicial.
-        df["% Ejecución"] = df.apply(lambda x: (x["Devengado Total"] / x["Presupuesto Inicial (PIM)"] * 100) if x["Presupuesto Inicial (PIM)"] else 0, axis=1).round(2) # Calcula el porcentaje de ejecución, manejando el caso donde el PIM es cero para evitar división por cero.
+        # Calcular métricas
+        columnas_devengado = [col for col in df.columns if "Devengado" in col]
+        df["Devengado Total"] = df[columnas_devengado].sum(axis=1)
+        df["Saldo Restante"] = df["Presupuesto Inicial (PIM)"] - df["Devengado Total"]
+        df["% Ejecución"] = df.apply(lambda x: (x["Devengado Total"] / x["Presupuesto Inicial (PIM)"] * 100) if x["Presupuesto Inicial (PIM)"] else 0, axis=1).round(2)
 
-        # Obtener información general del archivo
-        match = datetime.now()  # Obtiene la fecha y hora actual.
-        fecha_formateada = match.strftime("%d/%m/%Y %H:%M:%S")  # Formatea la fecha y hora para mostrarla.
-        pliego = df.get("pliego", pd.Series(["No especificado"])).iloc[0]  # Obtiene el pliego del DataFrame o "No especificado" si no está presente.
-        ano_eje = df.get("ano_eje", pd.Series(["No disponible"])).iloc[0]  # Obtiene el año de ejecución del DataFrame o "No disponible" si no está presente.
+        # Información general
+        fecha_formateada = datetime.now().strftime("%d/%m/%Y %H:%M:%S")
+        pliego = df.get("pliego", pd.Series(["No especificado"])).iloc[0]
+        ano_eje = df.get("ano_eje", pd.Series(["No disponible"])).iloc[0]
 
-        # Mostrar título e información general del tablero
-        st.title("📊 Tablero Presupuestal Interactivo")  # Agrega un título a la aplicación Streamlit.
-        st.markdown(f"""  # Agrega un texto con información sobre el tablero.
+        st.title("📊 Tablero Presupuestal Interactivo")
+        st.markdown(f"""
         **Entidad:** `{pliego}`  
         **Año Fiscal:** `{ano_eje}`  
         **Última actualización:** `{fecha_formateada}`  
 
-        Este tablero permite visualizar de manera dinámica y simplificada la ejecución presupuestal de tu entidad.  
-        Carga un archivo Excel con tu información presupuestal para explorar indicadores clave, hacer seguimientos por genérica o unidad ejecutora, y detectar oportunidades de mejora en la ejecución.
+        Este tablero permite visualizar de manera dinámica la ejecución presupuestal.
+        Carga un archivo Excel con tu información para explorar indicadores clave y seguimiento por genérica.
         """)
 
-        # Detectar y renombrar columna de genérica
-        posibles_generica = [col for col in df.columns if any(palabra in col for palabra in ["generica", "genérica", "generico", "genérico"])]  # Busca columnas que contengan alguna de las palabras clave en español para "genérica".
-        col_generica = posibles_generica[0] if posibles_generica else None  # Selecciona la primera columna encontrada o None si no se encuentra ninguna.
-        if col_generica:  # Si se encuentra una columna de genérica.
-            df.rename(columns={col_generica: "generica"}, inplace=True)  # Renombra la columna encontrada a "generica".
-        else:  # Si no se encuentra ninguna columna de genérica.
-            df["generica"] = "No especificado"  # Crea una nueva columna llamada "generica" y asigna el valor "No especificado" a todas las filas.
+        # Detección de columna de genérica
+        patron_generica = re.compile(r'generica?|gen[eé]rica?', re.IGNORECASE)
+        posibles_generica = [col for col in df.columns if patron_generica.search(col)]
 
-        # Filtro de genérica en la barra lateral
-        genericas = ["Todas"] + sorted(df["generica"].dropna().unique())  # Obtiene la lista de genéricas únicas del DataFrame, incluyendo "Todas".
-        filtro_generica = st.sidebar.selectbox("Filtrar por Genérica", genericas)  # Crea un widget de selección en la barra lateral para filtrar por genérica.
-        if filtro_generica != "Todas":  # Si se selecciona una genérica específica (diferente de "Todas").
-            df = df[df["generica"] == filtro_generica]  # Filtra el DataFrame para mostrar solo las filas correspondientes a la genérica seleccionada.
+        col_generica = None
+        if len(posibles_generica) == 1:
+            col_generica = posibles_generica[0]
+            df.rename(columns={col_generica: "generica"}, inplace=True)
+            st.sidebar.success(f"Columna de genérica detectada automáticamente: '{col_generica}'")
+        elif len(posibles_generica) > 1:
+            opcion = st.sidebar.selectbox("Múltiples columnas de genérica encontradas. Seleccione la correcta:", posibles_generica)
+            col_generica = opcion
+            df.rename(columns={col_generica: "generica"}, inplace=True)
+        else:
+            df["generica"] = "No especificado"
+            st.sidebar.info("No se encontró columna de genérica. Se usará 'No especificado'.")
 
-        # Filtro por unidad ejecutora si existe
-        if "unidad_ejecutora" in df.columns:  # Verifica si el DataFrame contiene la columna "unidad_ejecutora".
-            ues = ["Todas"] + sorted(df["unidad_ejecutora"].dropna().unique())  # Obtiene la lista de unidades ejecutoras únicas del DataFrame, incluyendo "Todas".
-            filtro_ue = st.sidebar.selectbox("Filtrar por Unidad Ejecutora", ues)  # Crea un widget de selección en la barra lateral para filtrar por unidad ejecutora.
-            if filtro_ue != "Todas":  # Si se selecciona una unidad ejecutora específica (diferente de "Todas").
-                df = df[df["unidad_ejecutora"] == filtro_ue]  # Filtra el DataFrame para mostrar solo las filas correspondientes a la unidad ejecutora seleccionada.
+        # Filtro de genérica
+        genericas = ["Todas"] + sorted(df["generica"].dropna().unique())
+        filtro_generica = st.sidebar.selectbox("Filtrar por Genérica", genericas)
+        if filtro_generica != "Todas":
+            df = df[df["generica"] == filtro_generica]
 
-        # Validación de datos antes de graficar
-        if df.empty or "generica" not in df.columns:  # Si el DataFrame está vacío o no contiene la columna "generica".
-            st.warning("No se encontraron datos para los filtros seleccionados.")  # Muestra una advertencia.
-            st.stop()  # Detiene la ejecución.
+        # Filtro por unidad ejecutora
+        if "unidad_ejecutora" in df.columns:
+            ues = ["Todas"] + sorted(df["unidad_ejecutora"].dropna().unique())
+            filtro_ue = st.sidebar.selectbox("Filtrar por Unidad Ejecutora", ues)
+            if filtro_ue != "Todas":
+                df = df[df["unidad_ejecutora"] == filtro_ue]
 
-        # Calcular totales globales
-        pim = df["Presupuesto Inicial (PIM)"].sum()  # Calcula la suma de la columna "Presupuesto Inicial (PIM)".
-        certificado = df["Certificado"].sum()  # Calcula la suma de la columna "Certificado".
-        compromiso = df["Compromiso Anual"].sum()  # Calcula la suma de la columna "Compromiso Anual".
-        devengado = df["Devengado Total"].sum()  # Calcula la suma de la columna "Devengado Total".
+        # Validar datos
+        if df.empty:
+            st.warning("No se encontraron datos para los filtros seleccionados.")
+            st.stop()
 
-        # Función para crear gráficos tipo gauge
-        def crear_gauge(valor, total, titulo, color):  # Define una función para crear un gráfico de tipo gauge (medidor).
-            porcentaje = round(valor / total * 100 if total else 0, 2)  # Calcula el porcentaje, manejando el caso donde el total es cero.
-            return go.Indicator(  # Crea un objeto Indicator de Plotly para el gráfico gauge.
-                mode="gauge+number",  # Establece el modo del gráfico como gauge y número.
-                value=porcentaje,  # Establece el valor del indicador (el porcentaje calculado).
-                number={"suffix": "%", "font": {"size": 24}},  # Formatea el número con un sufijo de porcentaje y tamaño de fuente.
-                title={"text": f"<b>{titulo}</b><br><span style='font-size:0.8em'>S/ {valor:,.0f}</span>", "font": {"size": 16}},  # Establece el título del gráfico, incluyendo el valor en soles formateado.
-                gauge={  # Configura el gauge (la parte visual del medidor).
-                    "axis": {"range": [0, 100], "tickwidth": 1, "tickcolor": "darkgray"},  # Configura el eje del gauge, incluyendo el rango y el formato de las marcas.
-                    "bar": {"color": color},  # Establece el color de la barra del gauge.
-                    "bgcolor": "white",  # Establece el color de fondo del gauge.
-                    "borderwidth": 1,  # Establece el ancho del borde del gauge.
-                    "bordercolor": "gray",  # Establece el color del borde del gauge.
-                    "steps": [  # Define los pasos del gauge con sus rangos y colores.
-                        {"range": [0, 50], "color": "#f2f2f2"},  # Paso 1: 0-50% (color gris claro).
-                        {"range": [50, 80], "color": "#d9ead3"},  # Paso 2: 50-80% (color verde claro).
-                        {"range": [80, 100], "color": "#b6d7a8"},  # Paso 3: 80-100% (color verde más oscuro).
+        # Totales globales
+        pim = df["Presupuesto Inicial (PIM)"].sum()
+        certificado = df["Certificado"].sum()
+        compromiso = df["Compromiso Anual"].sum()
+        devengado = df["Devengado Total"].sum()
+
+        # Función para gráficos gauge
+        def crear_gauge(valor, total, titulo, color):
+            porcentaje = round(valor / total * 100 if total else 0, 2)
+            return go.Indicator(
+                mode="gauge+number",
+                value=porcentaje,
+                number={"suffix": "%", "font": {"size": 24}},
+                title={"text": f"<b>{titulo}</b><br><span style='font-size:0.8em'>S/ {valor:,.0f}</span>", "font": {"size": 16}},
+                gauge={
+                    "axis": {"range": [0, 100], "tickwidth": 1, "tickcolor": "darkgray"},
+                    "bar": {"color": color},
+                    "bgcolor": "white",
+                    "borderwidth": 1,
+                    "bordercolor": "gray",
+                    "steps": [
+                        {"range": [0, 50], "color": "#f2f2f2"},
+                        {"range": [50, 80], "color": "#d9ead3"},
+                        {"range": [80, 100], "color": "#b6d7a8"},
                     ]
                 }
             )
 
-        # Mostrar indicadores clave con gráficos tipo gauge
-        col1, col2, col3 = st.columns(3)  # Crea tres columnas en la página para mostrar los tres gráficos gauge uno al lado del otro.
-        with col1:  # En la primera columna, muestra el gráfico de porcentaje de certificado.
-            fig_cert = go.Figure(crear_gauge(certificado, pim, "% Certificado", "#1f77b4"))  # Crea el gráfico gauge para el certificado.
-            st.plotly_chart(fig_cert, use_container_width=True)  # Muestra el gráfico en Streamlit, ajustando el ancho al contenedor.
-        with col2:  # En la segunda columna, muestra el gráfico de porcentaje de compromiso.
-            fig_comp = go.Figure(crear_gauge(compromiso, pim, "% Compromiso", "#ff7f0e"))  # Crea el gráfico gauge para el compromiso.
-            st.plotly_chart(fig_comp, use_container_width=True)  # Muestra el gráfico en Streamlit, ajustando el ancho al contenedor.
-        with col3:  # En la tercera columna, muestra el gráfico de porcentaje de devengado.
-            fig_dev = go.Figure(crear_gauge(devengado, pim, "% Devengado", "#2ca02c"))  # Crea el gráfico gauge para el devengado.
-            st.plotly_chart(fig_dev, use_container_width=True)  # Muestra el gráfico en Streamlit, ajustando el ancho al contenedor.
+        # Mostrar indicadores
+        col1, col2, col3 = st.columns(3)
+        with col1:
+            fig_cert = go.Figure(crear_gauge(certificado, pim, "% Certificado", "#1f77b4"))
+            st.plotly_chart(fig_cert, use_container_width=True)
+        with col2:
+            fig_comp = go.Figure(crear_gauge(compromiso, pim, "% Compromiso", "#ff7f0e"))
+            st.plotly_chart(fig_comp, use_container_width=True)
+        with col3:
+            fig_dev = go.Figure(crear_gauge(devengado, pim, "% Devengado", "#2ca02c"))
+            st.plotly_chart(fig_dev, use_container_width=True)
 
         # Tabla resumen por genérica
-        resumen = df.groupby("generica").agg({  # Agrupa el DataFrame por la columna "generica" y calcula las sumas de las columnas numéricas.
+        resumen = df.groupby("generica").agg({
             "Presupuesto Inicial (PIM)": "sum",
             "Certificado": "sum",
             "Compromiso Anual": "sum",
             "Devengado Total": "sum",
             "Saldo Restante": "sum"
-        }).reset_index()  # Convierte el resultado agrupado a un nuevo DataFrame.
-        resumen["PIM - Certificado"] = resumen["Presupuesto Inicial (PIM)"] - resumen["Certificado"]  # Calcula la diferencia entre el presupuesto inicial y el certificado para cada genérica.
-        resumen["% Ejecución"] = (resumen["Devengado Total"] / resumen["Presupuesto Inicial (PIM)"] * 100).round(2)  # Calcula el porcentaje de ejecución para cada genérica.
+        }).reset_index()
+        resumen["PIM - Certificado"] = resumen["Presupuesto Inicial (PIM)"] - resumen["Certificado"]
+        resumen["% Ejecución"] = (resumen["Devengado Total"] / resumen["Presupuesto Inicial (PIM)"] * 100).round(2)
 
-        # Reordenar columnas
-        cols_orden = ["Presupuesto Inicial (PIM)", "Certificado", "PIM - Certificado", "Compromiso Anual", "Devengado Total", "Saldo Restante", "% Ejecución"]  # Define el orden deseado de las columnas.
-        resumen = resumen[["generica"] + cols_orden]  # Reordena las columnas del DataFrame resumen.
+        cols_orden = ["Presupuesto Inicial (PIM)", "Certificado", "PIM - Certificado", "Compromiso Anual", "Devengado Total", "Saldo Restante", "% Ejecución"]
+        resumen = resumen[["generica"] + cols_orden]
 
-        # Mostrar tabla con totales
-        st.subheader("Resumen por Genérica")  # Agrega un subencabezado a la página para la tabla resumen.
-        resumen_total = resumen[cols_orden].select_dtypes(include='number').sum().to_frame().T # Calcula la suma de las columnas numéricas del dataframe `resumen` y la transpone para que quede como una fila.
-        resumen_total.insert(0, "generica", "TOTAL")  # Inserta una columna "generica" con el valor "TOTAL" en la primera posición.
-        resumen = pd.concat([resumen, resumen_total], ignore_index=True)  # Concatena el DataFrame resumen con la fila de totales.
-        resumen_formateado = resumen.applymap(lambda x: f"{x:,.0f}" if isinstance(x, (int, float)) else x)  # Formatea los números en el DataFrame resumen_formateado para que se muestren con separador de miles y sin decimales.
-        st.dataframe(resumen_formateado, use_container_width=True)  # Muestra el DataFrame formateado en Streamlit, ajustando el ancho al contenedor.
+        st.subheader("Resumen por Genérica")
+        resumen_total = resumen[cols_orden].select_dtypes(include='number').sum().to_frame().T
+        resumen_total.insert(0, "generica", "TOTAL")
+        resumen = pd.concat([resumen, resumen_total], ignore_index=True)
+        resumen_formateado = resumen.applymap(lambda x: f"{x:,.0f}" if isinstance(x, (int, float)) else x)
+        st.dataframe(resumen_formateado, use_container_width=True)
 
-        # Gráfico de evolución mensual
-        st.subheader("Evolución del Devengado Mensual")  # Agrega un subencabezado a la página para el gráfico de evolución mensual.
-        if "generica" not in df.columns:  # Verifica si la columna "generica" existe en el DataFrame.
-            st.warning("No se encontró la columna 'generica' para graficar la evolución mensual.")  # Muestra una advertencia si no se encuentra la columna.
+        # --- GRÁFICO DE EVOLUCIÓN MENSUAL MEJORADO ---
+        st.subheader("Evolución del Devengado Mensual")
+
+        # Preparar datos
+        dev_mes_gen = df.melt(id_vars=["generica"], value_vars=columnas_devengado,
+                              var_name="Mes", value_name="Monto")
+        dev_mes_gen["Mes"] = dev_mes_gen["Mes"].str.replace("Devengado ", "")
+
+        # Orden cronológico
+        meses_orden = ["Enero", "Febrero", "Marzo", "Abril", "Mayo", "Junio",
+                       "Julio", "Agosto", "Septiembre", "Octubre", "Noviembre", "Diciembre"]
+        dev_mes_gen["Mes"] = pd.Categorical(dev_mes_gen["Mes"], categories=meses_orden, ordered=True)
+        dev_mes_gen = dev_mes_gen.sort_values("Mes")
+
+        # Calcular total por mes (para anotaciones)
+        total_por_mes = dev_mes_gen.groupby("Mes")["Monto"].sum().reset_index()
+        total_por_mes.columns = ["Mes", "Total"]
+
+        # Determinar unidad automática
+        max_monto = dev_mes_gen["Monto"].max()
+        if max_monto > 1e6:
+            factor = 1e6
+            unidad = "Millones S/"
+            formato = lambda x: f"{x/factor:.2f}"
+        elif max_monto > 1e3:
+            factor = 1e3
+            unidad = "Miles S/"
+            formato = lambda x: f"{x/factor:.1f}"
         else:
-            dev_mes_gen = df.melt(id_vars=["generica"], value_vars=columnas_devengado, var_name="Mes", value_name="Monto")  # Convierte el DataFrame a formato largo para el gráfico de barras apiladas, usando "generica" como identificador.
-            dev_mes_gen["Mes"] = dev_mes_gen["Mes"].str.replace("Devengado ", "")  # Elimina el prefijo "Devengado " de los nombres de los meses.
-            dev_mes_gen["Monto"] = dev_mes_gen["Monto"] / 1000  # Convierte el monto a miles de soles para mejorar la legibilidad del gráfico.
+            factor = 1
+            unidad = "S/"
+            formato = lambda x: f"{x:,.0f}"
 
-            fig_bar = px.bar(  # Crea un gráfico de barras apiladas con Plotly Express.
-                dev_mes_gen,  # Usa el DataFrame dev_mes_gen como fuente de datos.
-                x="Mes",  # Establece la columna "Mes" en el eje x.
-                y="Monto",  # Establece la columna "Monto" en el eje y.
-                color="generica",  # Usa la columna "generica" para asignar colores a las barras, creando la apilación.
-                text="Monto",  # Etiqueta cada segmento de la barra con el valor del monto.
-                labels={"Monto": "Miles de S/"},  # Renombra la etiqueta del eje y.
-            )
-            fig_bar.update_traces(texttemplate='%{text:.1f}', textposition='outside')
-            fig_bar.update_layout(barmode="stack", uniformtext_minsize=8, uniformtext_mode='hide')
-            st.plotly_chart(fig_bar, use_container_width=True)  # Muestra el gráfico de barras en Streamlit, ajustando el ancho al contenedor.
+        # Crear columna para mostrar
+        dev_mes_gen["Monto_mostrar"] = dev_mes_gen["Monto"] / factor
 
-    except Exception as e:  # Captura cualquier excepción que ocurra dentro del bloque try.
-        st.error(f"Error al procesar el archivo: {e}")  # Muestra un mensaje de error con la excepción capturada.
-else:  # Si no se ha cargado ningún archivo.
-    st.info("Por favor, cargue un archivo Excel válido para comenzar.")  # Muestra un mensaje informativo solicitando cargar un archivo Excel.
+        # Selector de tipo de gráfico
+        tipo_grafico = st.radio("Tipo de gráfico", ["Apilado", "Agrupado", "100% Apilado"], horizontal=True, key="tipo_grafico")
+
+        # Crear figura base
+        if tipo_grafico == "100% Apilado":
+            # Calcular porcentajes
+            total_mes = dev_mes_gen.groupby("Mes")["Monto"].transform("sum")
+            dev_mes_gen["Porcentaje"] = dev_mes_gen["Monto"] / total_mes * 100
+            y_val = "Porcentaje"
+            labels = {"Porcentaje": "Porcentaje (%)"}
+            text_template = '%{text:.1f}%'
+            hover_template = '%{y:.1f}%'
+        else:
+            y_val = "Monto_mostrar"
+            labels = {"Monto_mostrar": unidad}
+            text_template = '%{text:.1f}' if factor > 1 else '%{text:,.0f}'
+            hover_template = '%{y:.1f}' if factor > 1 else '%{y:,.0f}'
+
+        # Crear gráfico de barras
+        fig_bar = px.bar(
+            dev_mes_gen,
+            x="Mes",
+            y=y_val,
+            color="generica",
+            text="Monto_mostrar" if y_val == "Monto_mostrar" else "Porcentaje",
+            labels=labels,
+            color_discrete_sequence=px.colors.qualitative.Set2,
+            hover_data={"Monto": ":,.0f"}  # Mostrar monto original en hover
+        )
+
+        # Configurar texto de las barras
+        fig_bar.update_traces(
+            texttemplate=text_template,
+            textposition='inside',  # Etiquetas dentro de los segmentos
+            insidetextanchor='middle',
+            textfont_size=10
+        )
+
+        # Configurar layout según tipo
+        if tipo_grafico == "Apilado":
+            barmode = "stack"
+            # Añadir anotaciones con el total encima de cada barra
+            for i, mes in enumerate(total_por_mes["Mes"]):
+                total_val = total_por_mes[total_por_mes["Mes"] == mes]["Total"].values[0]
+                total_mostrar = total_val / factor
+                fig_bar.add_annotation(
+                    x=mes,
+                    y=total_mostrar,
+                    text=f"<b>{formato(total_val)}</b>",  # Formato original
+                    showarrow=False,
+                    yshift=10,  # Desplazamiento vertical
+                    font=dict(size=12, color="black"),
+                    align="center"
+                )
+        elif tipo_grafico == "Agrupado":
+            barmode = "group"
+        else:  # 100% Apilado
+            barmode = "relative"
+            fig_bar.update_yaxes(range=[0, 100])
+
+        fig_bar.update_layout(
+            barmode=barmode,
+            uniformtext_minsize=8,
+            uniformtext_mode='hide',
+            yaxis_title=labels.get(y_val, unidad),
+            xaxis_title="Mes",
+            hovermode='x unified'
+        )
+
+        # Ajustar hover template para mostrar monto original
+        fig_bar.update_traces(
+            hovertemplate="<b>%{x}</b><br>" +
+                          "Genérica: %{fullData.name}<br>" +
+                          "Monto: S/ %{customdata[0]:,.0f}<br>" +
+                          "<extra></extra>",
+            customdata=dev_mes_gen[["Monto"]].values
+        )
+
+        st.plotly_chart(fig_bar, use_container_width=True)
+
+        # Opción de descargar datos
+        with st.expander("Descargar datos del gráfico"):
+            csv = dev_mes_gen[["generica", "Mes", "Monto"]].to_csv(index=False)
+            st.download_button("Descargar CSV", csv, "evolucion_mensual.csv", "text/csv")
+
+    except Exception as e:
+        st.error(f"Error al procesar el archivo: {e}")
+else:
+    st.info("Por favor, cargue un archivo Excel válido para comenzar.")
