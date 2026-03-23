@@ -1,9 +1,10 @@
 # app.py
 import streamlit as st
 import pandas as pd
+import os
 from datetime import datetime
 
-from config import PAGE_CONFIG
+from config import PAGE_CONFIG, CARPETA_RESPALDO
 from utils.file_handler import cargar_archivo_excel, guardar_archivo_respaldo
 from utils.data_processor import DataProcessor
 from components.sidebar import mostrar_logo, crear_filtros
@@ -17,13 +18,32 @@ st.set_page_config(**PAGE_CONFIG)
 # Logo
 mostrar_logo()
 
-# Cargar archivo
-archivo = cargar_archivo_excel()
+# Cargar archivo (manual)
+archivo_subido = cargar_archivo_excel()
 
-if archivo:
-    # Guardar respaldo
-    ruta_archivo = guardar_archivo_respaldo(archivo)
+# Variable para almacenar la ruta del archivo a procesar
+ruta_archivo = None
 
+if archivo_subido:
+    # Si el usuario subió un archivo, lo guardamos en Respaldo_Data (si es posible)
+    ruta_archivo = guardar_archivo_respaldo(archivo_subido)
+    st.success(f"Archivo cargado: {archivo_subido.name}")
+else:
+    # Si no se subió ningún archivo, buscar en la carpeta de respaldo
+    try:
+        archivos_respaldo = [f for f in os.listdir(CARPETA_RESPALDO) 
+                             if f.endswith(('.xls', '.xlsx')) and f != '.gitkeep']
+        if archivos_respaldo:
+            # Tomar el más reciente (por fecha de modificación)
+            archivo_reciente = max(archivos_respaldo, 
+                                   key=lambda f: os.path.getmtime(os.path.join(CARPETA_RESPALDO, f)))
+            ruta_archivo = os.path.join(CARPETA_RESPALDO, archivo_reciente)
+            st.info(f"Cargando archivo de respaldo: {archivo_reciente}")
+    except Exception as e:
+        st.warning(f"No se pudo acceder a la carpeta de respaldo: {e}")
+
+# Si hay un archivo disponible, procesarlo
+if ruta_archivo:
     try:
         # Leer datos
         df = pd.read_excel(ruta_archivo)
@@ -77,4 +97,4 @@ if archivo:
         st.error(f"Error al procesar el archivo: {str(e)}")
         st.exception(e)
 else:
-    st.info("👈 Por favor, cargue un archivo Excel válido para comenzar.")
+    st.info("👈 Por favor, cargue un archivo Excel válido o verifique que exista un archivo de respaldo en la carpeta.")
