@@ -621,7 +621,3 @@ else:
         | `generica` | Genérica de gasto (ej. "1.PERSONAL Y OBLIGACIONES SOCIALES") |
         
         **Ejemplo de datos:**
-        ```csv
-        mto_pim,mto_certificado,mto_compro_anual,mto_devenga_01,mto_devenga_02,tipo_act_obra_ac,generica
-        1000000,850000,800000,70000,65000,5005625,1.PERSONAL Y OBLIGACIONES SOCIALES
-        500000,400000,350000,30000,25000,4000068,6.ADQUISICION DE ACTIVOS NO FINANCIEROS
