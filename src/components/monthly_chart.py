@@ -3,7 +3,7 @@ import pandas as pd
 import streamlit as st
 import plotly.graph_objects as go
 import plotly.express as px
-from ..config import MESES, COLORES_GENERICAS
+from config import MESES, COLORES_GENERICAS
 
 def preparar_datos_grafico(df_filtrado, columnas_devengado):
     datos_grafico = []
