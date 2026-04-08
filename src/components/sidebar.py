@@ -1,6 +1,6 @@
 # components/sidebar.py
 import streamlit as st
-from ..config import LOGO_URL
+from config import LOGO_URL
 
 def mostrar_logo():
     st.sidebar.image(LOGO_URL, width=250)
