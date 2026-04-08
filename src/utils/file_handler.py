@@ -1,7 +1,7 @@
 # utils/file_handler.py
 import os
 import streamlit as st
-from ..config import CARPETA_RESPALDO
+from config import CARPETA_RESPALDO
 
 def guardar_archivo_respaldo(archivo):
     """Guarda el archivo cargado en la carpeta de respaldo"""
