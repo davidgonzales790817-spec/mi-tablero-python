@@ -3,7 +3,7 @@ import pandas as pd
 import re
 import numpy as np
 import streamlit as st
-from ..config import MESES, PATRONES_DEVENGADO, PATRONES_EXCLUIR
+from config import MESES, PATRONES_DEVENGADO, PATRONES_EXCLUIR
 
 class DataProcessor:
     def __init__(self, df):
