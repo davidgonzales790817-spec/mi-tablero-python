@@ -1,7 +1,7 @@
 # components/gauges.py
 import streamlit as st
 import plotly.graph_objects as go
-from ..config import COLORES_GAUGE
+from config import COLORES_GAUGE
 
 def crear_gauge(valor, total, titulo, color):
     porcentaje = round(valor / total * 100 if total > 0 else 0, 2)
