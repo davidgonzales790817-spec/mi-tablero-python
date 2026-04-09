@@ -11,7 +11,7 @@ from components.sidebar import mostrar_logo, crear_filtros
 from components.gauges import mostrar_indicadores
 from components.summary_table import crear_tabla_resumen
 from components.monthly_chart import crear_grafico_mensual
-from components.programacion_form import mostrar_formulario_programacion, inicializar_programacion
+# from components.programacion_form import mostrar_formulario_programacion, inicializar_programacion
 
 # Configuración de la página
 st.set_page_config(**PAGE_CONFIG)
