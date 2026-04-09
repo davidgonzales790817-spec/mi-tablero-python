@@ -11,6 +11,7 @@ from components.sidebar import mostrar_logo, crear_filtros
 from components.gauges import mostrar_indicadores
 from components.summary_table import crear_tabla_resumen
 from components.monthly_chart import crear_grafico_mensual
+# COMENTAR temporalmente la importación del formulario
 # from components.programacion_form import mostrar_formulario_programacion, inicializar_programacion
 
 # Configuración de la página
@@ -60,9 +61,9 @@ if st.session_state.df_procesado is not None:
     df_procesado = st.session_state.df_procesado
     columnas_devengado = st.session_state.columnas_devengado
     
-    # Inicializar programación con las genéricas disponibles
-    genericas_disponibles = sorted(df_procesado["generica"].unique())
-    inicializar_programacion(genericas_disponibles)
+    # COMENTAR temporalmente la inicialización del formulario
+    # genericas_disponibles = sorted(df_procesado["generica"].unique())
+    # inicializar_programacion(genericas_disponibles)
     
     # Aplicar filtros (esto devuelve el dataframe YA FILTRADO)
     df_filtrado = crear_filtros(df_procesado)
@@ -71,7 +72,7 @@ if st.session_state.df_procesado is not None:
         st.warning("No hay datos para los filtros seleccionados")
         st.stop()
     
-    # Información general (usando df_procesado para mostrar totales originales)
+    # Información general
     fecha_formateada = datetime.now().strftime("%d/%m/%Y %H:%M:%S")
     pliego = df_procesado.get("pliego", pd.Series(["No especificado"])).iloc[0] if "pliego" in df_procesado.columns else "No especificado"
     ano_eje = df_procesado.get("ano_eje", pd.Series(["No disponible"])).iloc[0] if "ano_eje" in df_procesado.columns else "No disponible"
@@ -105,12 +106,6 @@ if st.session_state.df_procesado is not None:
     # GRÁFICO MENSUAL (usando datos filtrados)
     # ============================================
     crear_grafico_mensual(df_filtrado, columnas_devengado)
-    
-    # ============================================
-    # FORMULARIO DE PROGRAMACIÓN (opcional)
-    # ============================================
-    # El formulario ya se muestra dentro de sidebar.py
-    # No es necesario llamarlo aquí
 
 else:
     st.info("👈 Por favor, cargue un archivo Excel válido para comenzar.")
