@@ -72,7 +72,7 @@ if ruta_archivo:
         """)
 
         # Aplicar filtros
-        df_filtrado, _ = crear_filtros(df_procesado)
+        df_filtrado = crear_filtros(df_procesado)
 
         if df_filtrado.empty:
             st.warning("No hay datos para los filtros seleccionados")
