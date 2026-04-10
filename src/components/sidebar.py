@@ -5,75 +5,6 @@ from config import LOGO_URL
 def mostrar_logo():
     st.sidebar.image(LOGO_URL, width=250)
 
-def crear_filtro_con_busqueda(opciones, titulo, key_prefix, df, columna, df_filtrado):
-    """
-    Crea un filtro con buscador y checkboxes
-    Retorna el dataframe filtrado actualizado
-    """
-    st.sidebar.subheader(titulo)
-    
-    # Buscador
-    busqueda = st.sidebar.text_input(
-        "🔍 Buscar",
-        placeholder=f"Filtrar {titulo.lower()}...",
-        key=f"buscar_{key_prefix}"
-    )
-    
-    # Filtrar opciones por búsqueda
-    opciones_filtradas = opciones.copy()
-    if busqueda:
-        opciones_filtradas = [opt for opt in opciones_filtradas if busqueda.lower() in opt.lower()]
-    
-    # Estado de selección en session_state
-    estado_key = f"sel_{key_prefix}"
-    if estado_key not in st.session_state:
-        st.session_state[estado_key] = []  # Vacío = mostrar todos
-    
-    # Botones de selección rápida
-    col1, col2 = st.sidebar.columns(2)
-    with col1:
-        if st.button("☑ Seleccionar todo", key=f"select_all_{key_prefix}", use_container_width=True):
-            st.session_state[estado_key] = opciones.copy()
-            st.rerun()
-    with col2:
-        if st.button("☐ Limpiar todo", key=f"clear_all_{key_prefix}", use_container_width=True):
-            st.session_state[estado_key] = []
-            st.rerun()
-    
-    # Mostrar opciones con checkboxes (usando contenedor con scroll)
-    with st.sidebar.container():
-        # Scroll para muchas opciones
-        st.markdown(f"""
-        <style>
-        div[data-testid="stVerticalBlock"] div:has(> div.element-container:has(> label)) {{
-            max-height: 250px;
-            overflow-y: auto;
-            border: 1px solid #ddd;
-            border-radius: 5px;
-            padding: 10px;
-            margin-bottom: 10px;
-        }}
-        </style>
-        """, unsafe_allow_html=True)
-        
-        for opcion in opciones_filtradas:
-            esta_seleccionada = opcion in st.session_state[estado_key]
-            seleccionada = st.checkbox(
-                opcion,
-                value=esta_seleccionada,
-                key=f"chk_{key_prefix}_{opcion}"
-            )
-            if seleccionada and opcion not in st.session_state[estado_key]:
-                st.session_state[estado_key].append(opcion)
-            elif not seleccionada and opcion in st.session_state[estado_key]:
-                st.session_state[estado_key].remove(opcion)
-    
-    # Aplicar filtro SOLO si hay selecciones
-    if st.session_state[estado_key]:
-        df_filtrado = df_filtrado[df_filtrado[columna].isin(st.session_state[estado_key])]
-    
-    return df_filtrado
-
 def crear_filtros(df):
     """
     Crea los filtros en la barra lateral con checkboxes y buscador
@@ -82,25 +13,89 @@ def crear_filtros(df):
     
     df_filtrado = df.copy()
     
+    # Inicializar session_state para todos los filtros
+    if "filtros_estado" not in st.session_state:
+        st.session_state.filtros_estado = {}
+    
     # ============================================
     # 1. FILTRO POR GENÉRICA
     # ============================================
     if "generica" in df.columns:
+        st.sidebar.subheader("📂 Genérica")
+        
         opciones = sorted(df["generica"].dropna().unique().tolist())
-        df_filtrado = crear_filtro_con_busqueda(
-            opciones, "📂 Genérica", "generica", 
-            df, "generica", df_filtrado
-        )
+        key_base = "filtro_generica"
+        
+        # Buscador
+        busqueda = st.sidebar.text_input("🔍 Buscar", key=f"buscar_{key_base}", placeholder="Filtrar genéricas...")
+        
+        # Filtrar opciones
+        opciones_filtradas = [opt for opt in opciones if busqueda.lower() in opt.lower()] if busqueda else opciones
+        
+        # Botones
+        col1, col2 = st.sidebar.columns(2)
+        with col1:
+            if st.button("☑ Seleccionar todo", key=f"select_all_{key_base}"):
+                for opt in opciones:
+                    st.session_state.filtros_estado[f"chk_{key_base}_{opt}"] = True
+                st.rerun()
+        with col2:
+            if st.button("☐ Limpiar todo", key=f"clear_all_{key_base}"):
+                for opt in opciones:
+                    st.session_state.filtros_estado[f"chk_{key_base}_{opt}"] = False
+                st.rerun()
+        
+        # Checkboxes
+        seleccionados = []
+        for opt in opciones_filtradas:
+            chk_key = f"chk_{key_base}_{opt}"
+            if chk_key not in st.session_state.filtros_estado:
+                st.session_state.filtros_estado[chk_key] = False
+            
+            checked = st.checkbox(opt, value=st.session_state.filtros_estado[chk_key], key=chk_key)
+            if checked:
+                seleccionados.append(opt)
+        
+        # Aplicar filtro
+        if seleccionados:
+            df_filtrado = df_filtrado[df_filtrado["generica"].isin(seleccionados)]
     
     # ============================================
     # 2. FILTRO POR UNIDAD EJECUTORA
     # ============================================
     if "unidad_ejecutora" in df.columns:
+        st.sidebar.subheader("🏛️ Unidad Ejecutora")
+        
         opciones = sorted(df["unidad_ejecutora"].dropna().unique().tolist())
-        df_filtrado = crear_filtro_con_busqueda(
-            opciones, "🏛️ Unidad Ejecutora", "ue",
-            df, "unidad_ejecutora", df_filtrado
-        )
+        key_base = "filtro_ue"
+        
+        busqueda = st.sidebar.text_input("🔍 Buscar", key=f"buscar_{key_base}", placeholder="Filtrar unidades...")
+        opciones_filtradas = [opt for opt in opciones if busqueda.lower() in opt.lower()] if busqueda else opciones
+        
+        col1, col2 = st.sidebar.columns(2)
+        with col1:
+            if st.button("☑ Seleccionar todo", key=f"select_all_{key_base}"):
+                for opt in opciones:
+                    st.session_state.filtros_estado[f"chk_{key_base}_{opt}"] = True
+                st.rerun()
+        with col2:
+            if st.button("☐ Limpiar todo", key=f"clear_all_{key_base}"):
+                for opt in opciones:
+                    st.session_state.filtros_estado[f"chk_{key_base}_{opt}"] = False
+                st.rerun()
+        
+        seleccionados = []
+        for opt in opciones_filtradas:
+            chk_key = f"chk_{key_base}_{opt}"
+            if chk_key not in st.session_state.filtros_estado:
+                st.session_state.filtros_estado[chk_key] = False
+            
+            checked = st.checkbox(opt, value=st.session_state.filtros_estado[chk_key], key=chk_key)
+            if checked:
+                seleccionados.append(opt)
+        
+        if seleccionados:
+            df_filtrado = df_filtrado[df_filtrado["unidad_ejecutora"].isin(seleccionados)]
     
     # ============================================
     # 3. FILTRO POR RUBRO DE FINANCIAMIENTO
@@ -112,11 +107,38 @@ def crear_filtros(df):
             break
     
     if col_rubro:
+        st.sidebar.subheader("💰 Rubro de Financiamiento")
+        
         opciones = sorted(df[col_rubro].dropna().unique().tolist())
-        df_filtrado = crear_filtro_con_busqueda(
-            opciones, "💰 Rubro de Financiamiento", "rubro",
-            df, col_rubro, df_filtrado
-        )
+        key_base = "filtro_rubro"
+        
+        busqueda = st.sidebar.text_input("🔍 Buscar", key=f"buscar_{key_base}", placeholder="Filtrar rubros...")
+        opciones_filtradas = [opt for opt in opciones if busqueda.lower() in opt.lower()] if busqueda else opciones
+        
+        col1, col2 = st.sidebar.columns(2)
+        with col1:
+            if st.button("☑ Seleccionar todo", key=f"select_all_{key_base}"):
+                for opt in opciones:
+                    st.session_state.filtros_estado[f"chk_{key_base}_{opt}"] = True
+                st.rerun()
+        with col2:
+            if st.button("☐ Limpiar todo", key=f"clear_all_{key_base}"):
+                for opt in opciones:
+                    st.session_state.filtros_estado[f"chk_{key_base}_{opt}"] = False
+                st.rerun()
+        
+        seleccionados = []
+        for opt in opciones_filtradas:
+            chk_key = f"chk_{key_base}_{opt}"
+            if chk_key not in st.session_state.filtros_estado:
+                st.session_state.filtros_estado[chk_key] = False
+            
+            checked = st.checkbox(opt, value=st.session_state.filtros_estado[chk_key], key=chk_key)
+            if checked:
+                seleccionados.append(opt)
+        
+        if seleccionados:
+            df_filtrado = df_filtrado[df_filtrado[col_rubro].isin(seleccionados)]
     
     # ============================================
     # 4. FILTRO POR PROYECTO/ACTIVIDAD
@@ -128,16 +150,43 @@ def crear_filtros(df):
             break
     
     if col_proyecto:
-        opciones = sorted(df[col_proyecto].dropna().unique().tolist())
-        # Limitar a 200 opciones para rendimiento
-        if len(opciones) > 200:
-            st.sidebar.warning(f"Hay {len(opciones)} proyectos. Mostrando los 200 más recientes.")
-            opciones = opciones[:200]
+        st.sidebar.subheader("📋 Proyecto / Actividad")
         
-        df_filtrado = crear_filtro_con_busqueda(
-            opciones, "📋 Proyecto / Actividad", "proyecto",
-            df, col_proyecto, df_filtrado
-        )
+        opciones = sorted(df[col_proyecto].dropna().unique().tolist())
+        # Limitar para rendimiento
+        if len(opciones) > 100:
+            st.sidebar.warning(f"Hay {len(opciones)} proyectos. Mostrando los 100 primeros.")
+            opciones = opciones[:100]
+        
+        key_base = "filtro_proyecto"
+        
+        busqueda = st.sidebar.text_input("🔍 Buscar", key=f"buscar_{key_base}", placeholder="Filtrar proyectos...")
+        opciones_filtradas = [opt for opt in opciones if busqueda.lower() in opt.lower()] if busqueda else opciones
+        
+        col1, col2 = st.sidebar.columns(2)
+        with col1:
+            if st.button("☑ Seleccionar todo", key=f"select_all_{key_base}"):
+                for opt in opciones:
+                    st.session_state.filtros_estado[f"chk_{key_base}_{opt}"] = True
+                st.rerun()
+        with col2:
+            if st.button("☐ Limpiar todo", key=f"clear_all_{key_base}"):
+                for opt in opciones:
+                    st.session_state.filtros_estado[f"chk_{key_base}_{opt}"] = False
+                st.rerun()
+        
+        seleccionados = []
+        for opt in opciones_filtradas:
+            chk_key = f"chk_{key_base}_{opt}"
+            if chk_key not in st.session_state.filtros_estado:
+                st.session_state.filtros_estado[chk_key] = False
+            
+            checked = st.checkbox(opt, value=st.session_state.filtros_estado[chk_key], key=chk_key)
+            if checked:
+                seleccionados.append(opt)
+        
+        if seleccionados:
+            df_filtrado = df_filtrado[df_filtrado[col_proyecto].isin(seleccionados)]
     
     # ============================================
     # 5. FILTRO POR SEC_FUNC
@@ -149,14 +198,41 @@ def crear_filtros(df):
             break
     
     if col_sec_func:
+        st.sidebar.subheader("🔢 Secuencia Funcional")
+        
         opciones = sorted(df[col_sec_func].dropna().unique().tolist())
-        df_filtrado = crear_filtro_con_busqueda(
-            opciones, "🔢 Secuencia Funcional", "sec_func",
-            df, col_sec_func, df_filtrado
-        )
+        key_base = "filtro_sec"
+        
+        busqueda = st.sidebar.text_input("🔍 Buscar", key=f"buscar_{key_base}", placeholder="Filtrar secuencias...")
+        opciones_filtradas = [opt for opt in opciones if busqueda.lower() in opt.lower()] if busqueda else opciones
+        
+        col1, col2 = st.sidebar.columns(2)
+        with col1:
+            if st.button("☑ Seleccionar todo", key=f"select_all_{key_base}"):
+                for opt in opciones:
+                    st.session_state.filtros_estado[f"chk_{key_base}_{opt}"] = True
+                st.rerun()
+        with col2:
+            if st.button("☐ Limpiar todo", key=f"clear_all_{key_base}"):
+                for opt in opciones:
+                    st.session_state.filtros_estado[f"chk_{key_base}_{opt}"] = False
+                st.rerun()
+        
+        seleccionados = []
+        for opt in opciones_filtradas:
+            chk_key = f"chk_{key_base}_{opt}"
+            if chk_key not in st.session_state.filtros_estado:
+                st.session_state.filtros_estado[chk_key] = False
+            
+            checked = st.checkbox(opt, value=st.session_state.filtros_estado[chk_key], key=chk_key)
+            if checked:
+                seleccionados.append(opt)
+        
+        if seleccionados:
+            df_filtrado = df_filtrado[df_filtrado[col_sec_func].isin(seleccionados)]
     
     # ============================================
-    # RESULTADO
+    # RESULTADO Y RESET
     # ============================================
     st.sidebar.markdown("---")
     
@@ -167,21 +243,13 @@ def crear_filtros(df):
     with col2:
         st.metric("✅ Mostrados", f"{len(df_filtrado):,}")
     
-    # Barra de progreso
     if len(df) > 0:
         porcentaje = (len(df_filtrado) / len(df)) * 100
         st.sidebar.progress(porcentaje / 100)
     
-    # Botón para resetear todos los filtros
+    # Botón reset global
     if st.sidebar.button("🗑️ Resetear todos los filtros", use_container_width=True):
-        # Limpiar todas las selecciones en session_state
-        for key in list(st.session_state.keys()):
-            if key.startswith("sel_"):
-                st.session_state[key] = []
-            if key.startswith("chk_"):
-                del st.session_state[key]
-            if key.startswith("buscar_"):
-                st.session_state[key] = ""
+        st.session_state.filtros_estado = {}
         st.rerun()
     
     return df_filtrado
