@@ -72,32 +72,29 @@ if st.session_state.df_procesado is not None:
     **Entidad:** `{pliego}`  
     **Año Fiscal:** `{ano_eje}`  
     **Última actualización:** `{fecha_formateada}`  
-    **Registros cargados:** `{len(df_procesado):,}`  
-    **Registros después de filtros:** `{len(df_filtrado):,}`
     """)
     
     # Verificar si hay datos filtrados
     if df_filtrado.empty:
-        st.warning("⚠️ No hay datos para los filtros seleccionados. Por favor, cambie los filtros.")
+        st.warning("⚠️ No hay datos para los filtros seleccionados. Haga clic en 'Limpiar todos los filtros' para ver todos los datos.")
     else:
         # ============================================
-        # INDICADORES GAUGE (usando datos filtrados)
+        # INDICADORES GAUGE
         # ============================================
         pim_total = df_filtrado["PIM"].sum()
         certificado_total = df_filtrado["Certificado"].sum()
         compromiso_total = df_filtrado["Compromiso_Anual"].sum()
         devengado_total = df_filtrado["Devengado_Total"].sum()
         
-        # Mostrar indicadores
         mostrar_indicadores(pim_total, certificado_total, compromiso_total, devengado_total)
         
         # ============================================
-        # TABLA RESUMEN (usando datos filtrados)
+        # TABLA RESUMEN
         # ============================================
         crear_tabla_resumen(df_filtrado)
         
         # ============================================
-        # GRÁFICO MENSUAL (usando datos filtrados)
+        # GRÁFICO MENSUAL
         # ============================================
         crear_grafico_mensual(df_filtrado, columnas_devengado)
 
