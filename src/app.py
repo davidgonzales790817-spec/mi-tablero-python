@@ -76,7 +76,7 @@ if st.session_state.df_procesado is not None:
     
     # Verificar si hay datos filtrados
     if df_filtrado.empty:
-        st.warning("⚠️ No hay datos para los filtros seleccionados. Haga clic en 'Limpiar todos los filtros' para ver todos los datos.")
+        st.warning("⚠️ No hay datos para los filtros seleccionados. Use 'Resetear todos los filtros' para ver todos los datos.")
     else:
         # ============================================
         # INDICADORES GAUGE
