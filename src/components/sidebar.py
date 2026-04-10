@@ -20,14 +20,12 @@ def crear_filtros(df):
         st.sidebar.subheader("📂 Genérica")
         opciones = sorted(df["generica"].dropna().unique().tolist())
         
-        # Usar una key fija para que Streamlit maneje el estado
         seleccion = st.sidebar.multiselect(
             "Seleccionar Genéricas:",
             options=opciones,
             default=[],
             key="multiselect_generica",
-            placeholder="Ninguna seleccionada = mostrar todas",
-            help="Seleccione una o varias genéricas. Si no selecciona ninguna, se muestran todas."
+            placeholder="Ninguna seleccionada = mostrar todas"
         )
         
         if seleccion:
@@ -88,7 +86,6 @@ def crear_filtros(df):
         st.sidebar.subheader("📋 Proyecto / Actividad")
         opciones = sorted(df[col_proyecto].dropna().unique().tolist())
         
-        # Limitar para rendimiento
         if len(opciones) > 100:
             st.sidebar.warning(f"Hay {len(opciones)} proyectos. Mostrando los 100 más comunes.")
             conteo = df[col_proyecto].value_counts()
@@ -130,7 +127,7 @@ def crear_filtros(df):
             df_filtrado = df_filtrado[df_filtrado[col_sec_func].isin(seleccion)]
     
     # ============================================
-    # MOSTRAR RESUMEN Y BOTÓN DE LIMPIEZA
+    # MOSTRAR RESUMEN
     # ============================================
     st.sidebar.markdown("---")
     
@@ -147,20 +144,11 @@ def crear_filtros(df):
     
     st.sidebar.markdown("---")
     
-    # Botón de limpieza - usando la forma más simple
-    # Al hacer clic, redirige a una URL que fuerza recarga limpia
+    # ============================================
+    # BOTÓN DE LIMPIEZA - VERSIÓN RECARGA DE PÁGINA
+    # ============================================
     if st.sidebar.button("🗑️ Limpiar todos los filtros", use_container_width=True):
-        # Limpiar todas las keys de multiselect
-        keys_a_limpiar = [
-            "multiselect_generica",
-            "multiselect_ue", 
-            "multiselect_rubro",
-            "multiselect_proyecto",
-            "multiselect_sec"
-        ]
-        for key in keys_a_limpiar:
-            if key in st.session_state:
-                del st.session_state[key]
-        st.rerun()
+        # Esta línea fuerza la recarga completa de la página
+        st.markdown('<meta http-equiv="refresh" content="0">', unsafe_allow_html=True)
     
     return df_filtrado
