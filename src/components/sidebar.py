@@ -7,36 +7,11 @@ def mostrar_logo():
 
 def crear_filtros(df):
     """
-    Crea los filtros en la barra lateral usando multiselect con control de estado
+    Crea los filtros en la barra lateral usando multiselect
     """
     st.sidebar.header("🔍 Filtros")
     
-    # Inicializar session_state para controlar el reset
-    if "reset_filtros" not in st.session_state:
-        st.session_state.reset_filtros = False
-    
     df_filtrado = df.copy()
-    
-    # ============================================
-    # FUNCIÓN PARA LIMPIAR FILTROS
-    # ============================================
-    def limpiar_filtros():
-        # Marcar que se necesita reset
-        st.session_state.reset_filtros = True
-        
-        # Limpiar explícitamente cada filtro
-        if "filtro_generica" in st.session_state:
-            st.session_state.filtro_generica = []
-        if "filtro_ue" in st.session_state:
-            st.session_state.filtro_ue = []
-        if "filtro_rubro" in st.session_state:
-            st.session_state.filtro_rubro = []
-        if "filtro_proyecto" in st.session_state:
-            st.session_state.filtro_proyecto = []
-        if "filtro_sec" in st.session_state:
-            st.session_state.filtro_sec = []
-        
-        st.rerun()
     
     # ============================================
     # 1. FILTRO POR GENÉRICA
@@ -45,18 +20,12 @@ def crear_filtros(df):
         st.sidebar.subheader("📂 Genérica")
         opciones = sorted(df["generica"].dropna().unique().tolist())
         
-        # Usar key con session_state para control
-        key = "filtro_generica"
-        
-        # Si se pidió reset, limpiar el valor
-        if st.session_state.reset_filtros:
-            st.session_state[key] = []
-        
+        # Usar una key fija para que Streamlit maneje el estado
         seleccion = st.sidebar.multiselect(
             "Seleccionar Genéricas:",
             options=opciones,
             default=[],
-            key=key,
+            key="multiselect_generica",
             placeholder="Ninguna seleccionada = mostrar todas",
             help="Seleccione una o varias genéricas. Si no selecciona ninguna, se muestran todas."
         )
@@ -71,16 +40,11 @@ def crear_filtros(df):
         st.sidebar.subheader("🏛️ Unidad Ejecutora")
         opciones = sorted(df["unidad_ejecutora"].dropna().unique().tolist())
         
-        key = "filtro_ue"
-        
-        if st.session_state.reset_filtros:
-            st.session_state[key] = []
-        
         seleccion = st.sidebar.multiselect(
             "Seleccionar Unidades Ejecutoras:",
             options=opciones,
             default=[],
-            key=key,
+            key="multiselect_ue",
             placeholder="Ninguna seleccionada = mostrar todas"
         )
         
@@ -100,16 +64,11 @@ def crear_filtros(df):
         st.sidebar.subheader("💰 Rubro de Financiamiento")
         opciones = sorted(df[col_rubro].dropna().unique().tolist())
         
-        key = "filtro_rubro"
-        
-        if st.session_state.reset_filtros:
-            st.session_state[key] = []
-        
         seleccion = st.sidebar.multiselect(
             "Seleccionar Rubros:",
             options=opciones,
             default=[],
-            key=key,
+            key="multiselect_rubro",
             placeholder="Ninguna seleccionada = mostrar todos"
         )
         
@@ -135,16 +94,11 @@ def crear_filtros(df):
             conteo = df[col_proyecto].value_counts()
             opciones = conteo.head(100).index.tolist()
         
-        key = "filtro_proyecto"
-        
-        if st.session_state.reset_filtros:
-            st.session_state[key] = []
-        
         seleccion = st.sidebar.multiselect(
             "Seleccionar Proyectos/Actividades:",
             options=opciones,
             default=[],
-            key=key,
+            key="multiselect_proyecto",
             placeholder="Ninguna seleccionada = mostrar todos"
         )
         
@@ -164,27 +118,16 @@ def crear_filtros(df):
         st.sidebar.subheader("🔢 Secuencia Funcional")
         opciones = sorted(df[col_sec_func].dropna().unique().tolist())
         
-        key = "filtro_sec"
-        
-        if st.session_state.reset_filtros:
-            st.session_state[key] = []
-        
         seleccion = st.sidebar.multiselect(
             "Seleccionar Secuencias Funcionales:",
             options=opciones,
             default=[],
-            key=key,
+            key="multiselect_sec",
             placeholder="Ninguna seleccionada = mostrar todas"
         )
         
         if seleccion:
             df_filtrado = df_filtrado[df_filtrado[col_sec_func].isin(seleccion)]
-    
-    # ============================================
-    # DESPUÉS DE PROCESAR, RESETEAR LA BANDERA
-    # ============================================
-    if st.session_state.reset_filtros:
-        st.session_state.reset_filtros = False
     
     # ============================================
     # MOSTRAR RESUMEN Y BOTÓN DE LIMPIEZA
@@ -204,8 +147,20 @@ def crear_filtros(df):
     
     st.sidebar.markdown("---")
     
-    # Botón de limpieza
+    # Botón de limpieza - usando la forma más simple
+    # Al hacer clic, redirige a una URL que fuerza recarga limpia
     if st.sidebar.button("🗑️ Limpiar todos los filtros", use_container_width=True):
-        limpiar_filtros()
+        # Limpiar todas las keys de multiselect
+        keys_a_limpiar = [
+            "multiselect_generica",
+            "multiselect_ue", 
+            "multiselect_rubro",
+            "multiselect_proyecto",
+            "multiselect_sec"
+        ]
+        for key in keys_a_limpiar:
+            if key in st.session_state:
+                del st.session_state[key]
+        st.rerun()
     
     return df_filtrado
