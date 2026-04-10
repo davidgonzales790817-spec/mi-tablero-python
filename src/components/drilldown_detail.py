@@ -3,7 +3,28 @@ import streamlit as st
 import pandas as pd
 import plotly.express as px
 
-def mostrar_detalle_clasificadores(df_filtrado, generica_seleccionada, columna_clasificador):
+def obtener_posibles_clasificadores(df_filtrado):
+    """
+    Detecta y retorna las columnas de clasificadores disponibles en los datos
+    """
+    posibles_clasificadores = []
+    
+    # Buscar columnas que podrían ser clasificadores
+    for col in df_filtrado.columns:
+        if any(p in col.lower() for p in ["proyecto", "actividad", "rubro", "clasificador", 
+                                            "sec_func", "secfunc", "secuencia", "funcional", 
+                                            "fuente", "cadena", "funcion", "division", "grupo"]):
+            posibles_clasificadores.append(col)
+    
+    # Si no se encontraron clasificadores específicos, buscar columnas de texto
+    if not posibles_clasificadores:
+        for col in df_filtrado.columns:
+            if df_filtrado[col].dtype == 'object' and col not in ["generica", "pliego", "unidad_ejecutora", "ano_eje"]:
+                posibles_clasificadores.append(col)
+    
+    return posibles_clasificadores
+
+def mostrar_detalle_clasificadores(df_filtrado, generica_seleccionada, columna_clasificador, mostrar_grafico=True):
     """
     Muestra un detalle desglosado de los clasificadores de gasto para una genérica específica
     """
@@ -49,30 +70,27 @@ def mostrar_detalle_clasificadores(df_filtrado, generica_seleccionada, columna_c
     resumen_display["%_PIM"] = resumen_display["%_PIM"].apply(lambda x: f"{x}%")
     resumen_display["%_Ejecucion"] = resumen_display["%_Ejecucion"].apply(lambda x: f"{x}%")
     
-    # Mostrar título
-    st.markdown(f"### 📋 Detalle de {columna_clasificador} para: **{generica_seleccionada}**")
-    st.caption(f"Mostrando los {top_n} de {len(resumen)} clasificadores (ordenados por PIM de mayor a menor)")
+    # Mostrar tabla sin título ni caption (se muestra en el expander)
+    st.dataframe(resumen_display, use_container_width=True, hide_index=True)
     
-    # Mostrar tabla
-    st.dataframe(resumen_display, use_container_width=True)
-    
-    # Gráfico de barras
-    fig = px.bar(
-        resumen_top,
-        x=columna_clasificador,
-        y="PIM",
-        title=f"Top {top_n} {columna_clasificador} por PIM - {generica_seleccionada}",
-        labels={"PIM": "Monto (Soles)", columna_clasificador: "Clasificador"},
-        text_auto='.2s'
-    )
-    fig.update_layout(height=450, xaxis_tickangle=45)
-    st.plotly_chart(fig, use_container_width=True)
+    # Gráfico de barras (opcional)
+    if mostrar_grafico and len(resumen_top) > 0:
+        fig = px.bar(
+            resumen_top,
+            x=columna_clasificador,
+            y="PIM",
+            title=f"Top {top_n} {columna_clasificador} por PIM",
+            labels={"PIM": "Monto (Soles)", columna_clasificador: "Clasificador"},
+            text_auto='.2s'
+        )
+        fig.update_layout(height=350, xaxis_tickangle=45)
+        st.plotly_chart(fig, use_container_width=True)
     
     return resumen
 
 def crear_tabla_con_drilldown(df_filtrado):
     """
-    Crea una tabla resumen con selector de genérica para ver detalle de clasificadores
+    Crea una tabla resumen con expanders por cada genérica para ver detalles de clasificadores
     """
     st.subheader("📊 Resumen por Genérica")
     
@@ -91,6 +109,9 @@ def crear_tabla_con_drilldown(df_filtrado):
     resumen["PIM_-_Certificado"] = resumen["PIM"] - resumen["Certificado"]
     resumen = resumen.sort_values("generica").reset_index(drop=True)
     
+    # Guardar resumen sin total para iteración
+    resumen_sin_total = resumen.copy()
+    
     # Agregar fila de total
     total_row = pd.DataFrame({
         "generica": ["TOTAL"],
@@ -102,75 +123,101 @@ def crear_tabla_con_drilldown(df_filtrado):
         "%_Ejecucion": [(resumen["Devengado_Total"].sum() / resumen["PIM"].sum() * 100)],
         "PIM_-_Certificado": [resumen["PIM"].sum() - resumen["Certificado"].sum()]
     })
-    resumen = pd.concat([resumen, total_row], ignore_index=True)
+    resumen_display = pd.concat([resumen, total_row], ignore_index=True)
     
     # Formatear para mostrar
-    resumen_display = resumen.copy()
+    resumen_display_fmt = resumen_display.copy()
     for col in ["PIM", "Certificado", "PIM_-_Certificado", "Compromiso_Anual", "Devengado_Total", "Saldo"]:
-        if col in resumen_display.columns:
-            resumen_display[col] = resumen_display[col].apply(lambda x: f"S/ {x:,.0f}")
-    resumen_display["%_Ejecucion"] = resumen_display["%_Ejecucion"].apply(lambda x: f"{x:.1f}%")
+        if col in resumen_display_fmt.columns:
+            resumen_display_fmt[col] = resumen_display_fmt[col].apply(lambda x: f"S/ {x:,.0f}")
+    resumen_display_fmt["%_Ejecucion"] = resumen_display_fmt["%_Ejecucion"].apply(lambda x: f"{x:.1f}%")
     
     # Mostrar tabla
     st.dataframe(
-        resumen_display,
+        resumen_display_fmt,
         use_container_width=True,
         column_config={
             "generica": st.column_config.TextColumn("Genérica", width="medium"),
-        }
+        },
+        hide_index=True
     )
     
     # ============================================
-    # 2. DRILLDOWN - Selección de genérica
+    # 2. DETECTAR CLASIFICADORES DISPONIBLES
+    # ============================================
+    posibles_clasificadores = obtener_posibles_clasificadores(df_filtrado)
+    
+    if not posibles_clasificadores:
+        st.warning("⚠️ No se encontraron columnas de clasificadores en los datos")
+        return resumen
+    
+    # ============================================
+    # 3. SELECTOR GLOBAL DE TIPO DE CLASIFICADOR
     # ============================================
     st.markdown("---")
     st.markdown("### 🔍 Desglose por clasificador de gasto")
-    st.markdown("Seleccione una genérica para ver sus clasificadores más relevantes (ordenados por PIM):")
     
-    # Opciones de genérica (excluyendo TOTAL)
-    opciones_genericas = resumen[resumen["generica"] != "TOTAL"]["generica"].tolist()
-    
-    col1, col2 = st.columns([2, 1])
-    with col1:
-        generica_seleccionada = st.selectbox(
-            "📌 Seleccionar Genérica:",
-            options=opciones_genericas,
-            key="drilldown_generica"
-        )
-    
-    # Detectar columnas de clasificadores disponibles
-    with col2:
-        # Buscar columnas que podrían ser clasificadores
-        posibles_clasificadores = []
-        for col in df_filtrado.columns:
-            if any(p in col.lower() for p in ["proyecto", "actividad", "rubro", "clasificador", "sec_func", "secfunc", "secuencia", "funcional", "fuente", "cadena", "funcion", "division", "grupo"]):
-                posibles_clasificadores.append(col)
-        
-        # Si no se encontraron clasificadores específicos, buscar columnas de texto
-        if not posibles_clasificadores:
-            for col in df_filtrado.columns:
-                if df_filtrado[col].dtype == 'object' and col not in ["generica", "pliego", "unidad_ejecutora", "ano_eje"]:
-                    posibles_clasificadores.append(col)
-        
-        if posibles_clasificadores:
-            clasificador_seleccionado = st.selectbox(
-                "📂 Tipo de clasificador:",
-                options=posibles_clasificadores,
-                key="tipo_clasificador"
-            )
-        else:
-            st.warning("No se encontraron columnas de clasificadores en los datos")
-            clasificador_seleccionado = None
+    clasificador_seleccionado = st.selectbox(
+        "📂 Seleccione el tipo de clasificador a visualizar:",
+        options=posibles_clasificadores,
+        key="tipo_clasificador_global"
+    )
     
     # ============================================
-    # 3. MOSTRAR DETALLE
+    # 4. EXPANDERS POR CADA GENÉRICA
     # ============================================
-    if generica_seleccionada and clasificador_seleccionado:
-        with st.expander(f"📋 Ver detalle de {clasificador_seleccionado} para {generica_seleccionada}", expanded=True):
+    st.markdown("**Haga clic en cada genérica para ver su desglose:**")
+    
+    for idx, row in resumen_sin_total.iterrows():
+        generica = row["generica"]
+        pim = row["PIM"]
+        ejecucion = row["%_Ejecucion"]
+        
+        # Crear header para el expander con información resumida
+        header_text = f"📦 {generica} | PIM: S/ {pim:,.0f} | Ejecución: {ejecucion:.1f}%"
+        
+        with st.expander(header_text, expanded=False):
+            st.markdown(f"**Detalle de {clasificador_seleccionado}**")
             mostrar_detalle_clasificadores(
-                df_filtrado, 
-                generica_seleccionada, 
-                clasificador_seleccionado
+                df_filtrado,
+                generica,
+                clasificador_seleccionado,
+                mostrar_grafico=True
             )
+    
+    # ============================================
+    # 5. VISTA ALTERNATIVA: TABLA COMBINADA (OPCIONAL)
+    # ============================================
+    if st.checkbox("📊 Mostrar vista de tabla combinada", value=False):
+        st.markdown("### Vista combinada: Todas las genéricas")
+        
+        # Crear tabla con todas las genéricas y sus clasificadores
+        datos_combinados = []
+        
+        for _, row in resumen_sin_total.iterrows():
+            generica = row["generica"]
+            df_gen = df_filtrado[df_filtrado["generica"] == generica]
+            
+            if clasificador_seleccionado in df_gen.columns:
+                resumen_gen = df_gen.groupby(clasificador_seleccionado).agg({
+                    "PIM": "sum",
+                    "Devengado_Total": "sum"
+                }).reset_index()
+                
+                resumen_gen["generica"] = generica
+                resumen_gen["%_Ejecucion"] = (resumen_gen["Devengado_Total"] / resumen_gen["PIM"] * 100).round(2)
+                datos_combinados.append(resumen_gen)
+        
+        if datos_combinados:
+            tabla_combinada = pd.concat(datos_combinados, ignore_index=True)
+            tabla_combinada = tabla_combinada.sort_values(["generica", "PIM"], ascending=[True, False])
+            
+            # Formatear
+            tabla_combinada_fmt = tabla_combinada.copy()
+            tabla_combinada_fmt["PIM"] = tabla_combinada_fmt["PIM"].apply(lambda x: f"S/ {x:,.0f}")
+            tabla_combinada_fmt["Devengado_Total"] = tabla_combinada_fmt["Devengado_Total"].apply(lambda x: f"S/ {x:,.0f}")
+            tabla_combinada_fmt["%_Ejecucion"] = tabla_combinada_fmt["%_Ejecucion"].apply(lambda x: f"{x:.1f}%")
+            
+            st.dataframe(tabla_combinada_fmt, use_container_width=True, hide_index=True)
     
     return resumen
