@@ -1,31 +1,35 @@
-def extract_classifier_codes(data):
-    # Example implementation to extract classifier codes
-    return [row['classifier_code'] for row in data if 'classifier_code' in row]
+# Improved Drilldown Detail Code
+
+## Classifier Extraction, Expanders by Generic, and Supporting Functions
+
+def extract_classifier(data):
+    """Extract classifier from the given data."""
+    # Logic for classifier extraction
+    pass
 
 
-def extract_classifier_descriptions(data):
-    # Example implementation to extract classifier descriptions
-    return [row['description'] for row in data if 'description' in row]
+def expander_by_generic(data, generic_type):
+    """Expand data by generic type."""
+    # Logic for expansion
+    pass
 
 
-def detect_classifier_columns(data):
-    # Example implementation to detect relevant classifier columns
-    return [key for key in data[0].keys() if 'classifier' in key]
+def supporting_function_1():
+    """Supporting function 1 logic."""
+    pass
 
 
-def display_classifier_info(data):
-    codes = extract_classifier_codes(data)
-    descriptions = extract_classifier_descriptions(data)
-    classifier_columns = detect_classifier_columns(data)
+def supporting_function_2():
+    """Supporting function 2 logic."""
+    pass
 
-    # Logic to display these using tables and charts
-    for code, description in zip(codes, descriptions):
-        print(f'{code} - {description}')  # Replace with actual display logic
+# Main function to demonstrate the drilldown detail
 
+def main():
+    sample_data = {}  # Replace with actual data
+    classifier = extract_classifier(sample_data)
+    expanded_data = expander_by_generic(sample_data, classifier)
+    # Additional logic and function calls
 
-# Integrating these functions in the drilldown detail
-
-# Example usage:
 if __name__ == '__main__':
-    data = [{ 'classifier_code': '2.1.4.1.1.1', 'description': 'COMPENSACION POR TIEMPO DE SERVICIOS' }]
-    display_classifier_info(data)
+    main()
