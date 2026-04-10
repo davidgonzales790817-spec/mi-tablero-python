@@ -11,8 +11,6 @@ from components.sidebar import mostrar_logo, crear_filtros
 from components.gauges import mostrar_indicadores
 from components.summary_table import crear_tabla_resumen
 from components.monthly_chart import crear_grafico_mensual
-# COMENTAR temporalmente la importación del formulario
-# from components.programacion_form import mostrar_formulario_programacion, inicializar_programacion
 
 # Configuración de la página
 st.set_page_config(**PAGE_CONFIG)
@@ -61,16 +59,8 @@ if st.session_state.df_procesado is not None:
     df_procesado = st.session_state.df_procesado
     columnas_devengado = st.session_state.columnas_devengado
     
-    # COMENTAR temporalmente la inicialización del formulario
-    # genericas_disponibles = sorted(df_procesado["generica"].unique())
-    # inicializar_programacion(genericas_disponibles)
-    
-    # Aplicar filtros (esto devuelve el dataframe YA FILTRADO)
+    # Aplicar filtros
     df_filtrado = crear_filtros(df_procesado)
-    
-    if df_filtrado.empty:
-        st.warning("No hay datos para los filtros seleccionados")
-        st.stop()
     
     # Información general
     fecha_formateada = datetime.now().strftime("%d/%m/%Y %H:%M:%S")
@@ -86,26 +76,30 @@ if st.session_state.df_procesado is not None:
     **Registros después de filtros:** `{len(df_filtrado):,}`
     """)
     
-    # ============================================
-    # INDICADORES GAUGE (usando datos filtrados)
-    # ============================================
-    pim_total = df_filtrado["PIM"].sum()
-    certificado_total = df_filtrado["Certificado"].sum()
-    compromiso_total = df_filtrado["Compromiso_Anual"].sum()
-    devengado_total = df_filtrado["Devengado_Total"].sum()
-    
-    # Mostrar indicadores
-    mostrar_indicadores(pim_total, certificado_total, compromiso_total, devengado_total)
-    
-    # ============================================
-    # TABLA RESUMEN (usando datos filtrados)
-    # ============================================
-    crear_tabla_resumen(df_filtrado)
-    
-    # ============================================
-    # GRÁFICO MENSUAL (usando datos filtrados)
-    # ============================================
-    crear_grafico_mensual(df_filtrado, columnas_devengado)
+    # Verificar si hay datos filtrados
+    if df_filtrado.empty:
+        st.warning("⚠️ No hay datos para los filtros seleccionados. Por favor, cambie los filtros.")
+    else:
+        # ============================================
+        # INDICADORES GAUGE (usando datos filtrados)
+        # ============================================
+        pim_total = df_filtrado["PIM"].sum()
+        certificado_total = df_filtrado["Certificado"].sum()
+        compromiso_total = df_filtrado["Compromiso_Anual"].sum()
+        devengado_total = df_filtrado["Devengado_Total"].sum()
+        
+        # Mostrar indicadores
+        mostrar_indicadores(pim_total, certificado_total, compromiso_total, devengado_total)
+        
+        # ============================================
+        # TABLA RESUMEN (usando datos filtrados)
+        # ============================================
+        crear_tabla_resumen(df_filtrado)
+        
+        # ============================================
+        # GRÁFICO MENSUAL (usando datos filtrados)
+        # ============================================
+        crear_grafico_mensual(df_filtrado, columnas_devengado)
 
 else:
     st.info("👈 Por favor, cargue un archivo Excel válido para comenzar.")
