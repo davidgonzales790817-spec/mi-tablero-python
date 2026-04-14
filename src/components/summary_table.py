@@ -3,195 +3,151 @@ import streamlit as st
 import pandas as pd
 import plotly.express as px
 
-def construir_clasificador(df):
+def construir_clasificador_completo(df, generica_seleccionada):
     """
-    Construye un clasificador jerárquico a partir de múltiples campos
+    Construye el clasificador jerárquico completo para una genérica específica
     Formato: generica.subgenerica.subgenerica_det.especifica.especifica_det
     """
-    # Lista de posibles campos en orden jerárquico
-    campos_jerarquia = ["generica", "subgenerica", "subgenerica_det", "especifica", "especifica_det"]
+    # Filtrar por la genérica seleccionada
+    df_gen = df[df["generica"] == generica_seleccionada].copy()
     
-    # Verificar qué campos existen en el DataFrame
-    campos_existentes = [campo for campo in campos_jerarquia if campo in df.columns]
+    if df_gen.empty:
+        return None
+    
+    # Campos jerárquicos en orden
+    campos_jerarquia = ["generica", "subgenerica", "subgenerica_det", "especifica", "especifica_det"]
+    campos_existentes = [c for c in campos_jerarquia if c in df_gen.columns]
     
     if not campos_existentes:
         return None
     
-    # Crear el clasificador concatenando los campos
-    df = df.copy()
-    df["clasificador_completo"] = ""
-    df["clasificador_codigo"] = ""
-    df["clasificador_descripcion"] = ""
+    # Construir el código jerárquico (ej: 2.3.2.4.2.1)
+    codigo = df_gen[campos_existentes[0]].astype(str)
+    for campo in campos_existentes[1:]:
+        codigo = codigo + "." + df_gen[campo].astype(str)
     
-    for i, campo in enumerate(campos_existentes):
-        # Separador
-        separador = " > " if i > 0 else ""
-        df["clasificador_completo"] = df["clasificador_completo"] + separador + df[campo].astype(str)
-        
-        # Para el código (solo los valores numéricos/códigos)
-        if campo == "generica":
-            df["clasificador_codigo"] = df["clasificador_codigo"] + df[campo].astype(str)
-            df["clasificador_descripcion"] = df["clasificador_descripcion"] + df[campo].astype(str)
-        else:
-            df["clasificador_codigo"] = df["clasificador_codigo"] + "." + df[campo].astype(str)
-            df["clasificador_descripcion"] = df["clasificador_descripcion"] + " - " + df[campo].astype(str)
+    # Construir la descripción jerárquica (ej: 2 > 3 > 2 > 4 > 2 > 1)
+    descripcion = df_gen[campos_existentes[0]].astype(str)
+    for campo in campos_existentes[1:]:
+        descripcion = descripcion + " > " + df_gen[campo].astype(str)
     
-    return df["clasificador_completo"]
+    df_gen["clasificador_codigo"] = codigo
+    df_gen["clasificador_descripcion"] = descripcion
+    
+    return df_gen
 
-def detectar_columnas_clasificador(df):
+def mostrar_detalle_clasificadores(df_filtrado, generica_seleccionada):
     """
-    Detecta las columnas que pueden usarse como clasificador
-    """
-    clasificadores = []
-    
-    # 1. Clasificador jerárquico construido
-    if "generica" in df.columns:
-        clasificadores.append("📊 Clasificador Jerárquico (Completo)")
-    
-    # 2. Campos individuales
-    campos_clasificador = {
-        "generica": "📁 Genérica",
-        "subgenerica": "📂 Subgenérica",
-        "subgenerica_det": "📄 Subgenérica Detallada",
-        "especifica": "🔖 Específica",
-        "especifica_det": "🏷️ Específica Detallada"
-    }
-    
-    for campo, nombre in campos_clasificador.items():
-        if campo in df.columns:
-            clasificadores.append(nombre)
-    
-    # 3. Otros campos comunes
-    otros_campos = ["proyecto", "actividad", "rubro", "fuente_financiamiento", "sec_func", "sec_funcional"]
-    for campo in otros_campos:
-        if campo in df.columns:
-            clasificadores.append(f"📌 {campo.replace('_', ' ').title()}")
-    
-    return clasificadores
-
-def obtener_datos_clasificador(df, tipo_clasificador):
-    """
-    Obtiene los datos del clasificador según el tipo seleccionado
-    """
-    if tipo_clasificador == "📊 Clasificador Jerárquico (Completo)":
-        # Construir el clasificador jerárquico
-        campos_jerarquia = ["generica", "subgenerica", "subgenerica_det", "especifica", "especifica_det"]
-        campos_existentes = [c for c in campos_jerarquia if c in df.columns]
-        
-        if campos_existentes:
-            # Crear el clasificador completo
-            df_temp = df.copy()
-            clasificador = df_temp[campos_existentes[0]].astype(str)
-            for campo in campos_existentes[1:]:
-                clasificador = clasificador + "." + df_temp[campo].astype(str)
-            return clasificador
-        return None
-    
-    elif "Genérica" in tipo_clasificador:
-        return df["generica"] if "generica" in df.columns else None
-    elif "Subgenérica" in tipo_clasificador:
-        return df["subgenerica"] if "subgenerica" in df.columns else None
-    elif "Subgenérica Detallada" in tipo_clasificador:
-        return df["subgenerica_det"] if "subgenerica_det" in df.columns else None
-    elif "Específica" in tipo_clasificador:
-        return df["especifica"] if "especifica" in df.columns else None
-    elif "Específica Detallada" in tipo_clasificador:
-        return df["especifica_det"] if "especifica_det" in df.columns else None
-    else:
-        # Buscar por nombre
-        for col in df.columns:
-            if col.lower().replace("_", " ") in tipo_clasificador.lower():
-                return df[col]
-        return None
-
-def mostrar_detalle_clasificadores(df_filtrado, generica_seleccionada, tipo_clasificador):
-    """
-    Muestra un detalle desglosado de los clasificadores para una genérica específica
+    Muestra el detalle de clasificadores para una genérica específica
     """
     if not generica_seleccionada or generica_seleccionada == "TOTAL":
-        return None
+        return
     
-    # Filtrar datos por la genérica seleccionada
-    df_gen = df_filtrado[df_filtrado["generica"] == generica_seleccionada]
+    st.markdown("---")
+    st.markdown(f"## 📋 Desglose de: **{generica_seleccionada}**")
     
-    if df_gen.empty:
-        st.warning(f"No hay datos para la genérica: {generica_seleccionada}")
-        return None
+    # Construir el clasificador jerárquico
+    df_detalle = construir_clasificador_completo(df_filtrado, generica_seleccionada)
     
-    # Obtener la columna del clasificador
-    columna_clasificador = obtener_datos_clasificador(df_gen, tipo_clasificador)
+    if df_detalle is None or df_detalle.empty:
+        st.warning(f"No hay datos de clasificadores para {generica_seleccionada}")
+        return
     
-    if columna_clasificador is None:
-        st.info(f"No se pudo obtener el clasificador: {tipo_clasificador}")
-        return None
-    
-    # Agrupar por el clasificador
-    resumen = df_gen.groupby(columna_clasificador).agg({
+    # ============================================
+    # 1. AGRUPAR POR CLASIFICADOR COMPLETO
+    # ============================================
+    # Usar el código jerárquico como identificador único
+    resumen = df_detalle.groupby(["clasificador_codigo", "clasificador_descripcion"]).agg({
         "PIM": "sum",
+        "Certificado": "sum",
+        "Compromiso_Anual": "sum",
         "Devengado_Total": "sum",
         "Saldo": "sum"
     }).reset_index()
     
-    # Renombrar la columna del clasificador
-    resumen.rename(columns={columna_clasificador.name: "clasificador"}, inplace=True)
-    
-    # Limpiar valores nulos
-    resumen = resumen.dropna(subset=["clasificador"])
-    resumen = resumen[resumen["clasificador"] != "nan"]
-    
     # Calcular porcentajes
     total_pim = resumen["PIM"].sum()
-    resumen["%_PIM"] = (resumen["PIM"] / total_pim * 100).round(2)
+    resumen["%_PIM"] = (resumen["PIM"] / total_pim * 100).round(2) if total_pim > 0 else 0
     resumen["%_Ejecucion"] = (resumen["Devengado_Total"] / resumen["PIM"] * 100).round(2)
+    resumen["PIM_-_Certificado"] = resumen["PIM"] - resumen["Certificado"]
     
     # Ordenar por PIM de mayor a menor
     resumen = resumen.sort_values("PIM", ascending=False)
     
-    # Mostrar top 15 (o menos si hay pocos)
-    top_n = min(15, len(resumen))
-    resumen_top = resumen.head(top_n)
+    # ============================================
+    # 2. MOSTRAR TABLA DE CLASIFICADORES
+    # ============================================
+    st.subheader(f"Clasificadores de {generica_seleccionada}")
+    st.caption(f"Total de clasificadores: {len(resumen)} | PIM Total: S/ {total_pim:,.0f}")
     
     # Formatear para mostrar
-    resumen_display = resumen_top.copy()
+    resumen_display = resumen.copy()
     resumen_display["PIM"] = resumen_display["PIM"].apply(lambda x: f"S/ {x:,.0f}")
+    resumen_display["Certificado"] = resumen_display["Certificado"].apply(lambda x: f"S/ {x:,.0f}")
+    resumen_display["PIM_-_Certificado"] = resumen_display["PIM_-_Certificado"].apply(lambda x: f"S/ {x:,.0f}")
+    resumen_display["Compromiso_Anual"] = resumen_display["Compromiso_Anual"].apply(lambda x: f"S/ {x:,.0f}")
     resumen_display["Devengado_Total"] = resumen_display["Devengado_Total"].apply(lambda x: f"S/ {x:,.0f}")
     resumen_display["Saldo"] = resumen_display["Saldo"].apply(lambda x: f"S/ {x:,.0f}")
     resumen_display["%_PIM"] = resumen_display["%_PIM"].apply(lambda x: f"{x}%")
     resumen_display["%_Ejecucion"] = resumen_display["%_Ejecucion"].apply(lambda x: f"{x}%")
     
-    # Mostrar título
-    st.markdown(f"### 📋 Detalle para: **{generica_seleccionada}**")
-    st.markdown(f"**Tipo de clasificador:** {tipo_clasificador}")
-    st.caption(f"Mostrando los {top_n} de {len(resumen)} clasificadores (ordenados por PIM de mayor a menor)")
-    
     # Mostrar tabla
-    st.dataframe(resumen_display, use_container_width=True)
+    st.dataframe(
+        resumen_display,
+        use_container_width=True,
+        column_config={
+            "clasificador_codigo": st.column_config.TextColumn("Código", width="small"),
+            "clasificador_descripcion": st.column_config.TextColumn("Descripción", width="large"),
+            "PIM": st.column_config.TextColumn("PIM", width="medium"),
+            "Certificado": st.column_config.TextColumn("Certificado", width="medium"),
+            "PIM_-_Certificado": st.column_config.TextColumn("PIM - Certificado", width="medium"),
+            "Compromiso_Anual": st.column_config.TextColumn("Compromiso", width="medium"),
+            "Devengado_Total": st.column_config.TextColumn("Devengado", width="medium"),
+            "Saldo": st.column_config.TextColumn("Saldo", width="medium"),
+            "%_PIM": st.column_config.TextColumn("% PIM", width="small"),
+            "%_Ejecucion": st.column_config.TextColumn("% Ejec.", width="small")
+        }
+    )
     
-    # Gráfico de barras (solo si hay suficientes datos)
-    if len(resumen_top) > 1:
-        # Acortar textos largos para el gráfico
-        resumen_top["clasificador_corto"] = resumen_top["clasificador"].apply(
-            lambda x: x[:50] + "..." if len(str(x)) > 50 else str(x)
-        )
+    # ============================================
+    # 3. GRÁFICO DE BARRAS (Top 10)
+    # ============================================
+    top_n = min(10, len(resumen))
+    if top_n > 1:
+        st.subheader(f"Top {top_n} Clasificadores por PIM")
+        
+        resumen_top = resumen.head(top_n)
+        # Crear etiqueta corta para el gráfico
+        resumen_top["etiqueta"] = resumen_top["clasificador_codigo"] + " - " + resumen_top["clasificador_descripcion"].str[:40]
         
         fig = px.bar(
             resumen_top,
-            x="clasificador_corto",
+            x="etiqueta",
             y="PIM",
-            title=f"Top {top_n} {tipo_clasificador} por PIM - {generica_seleccionada}",
-            labels={"PIM": "Monto (Soles)", "clasificador_corto": "Clasificador"},
+            title=f"Top {top_n} clasificadores - {generica_seleccionada}",
+            labels={"PIM": "Monto (Soles)", "etiqueta": "Clasificador"},
             text_auto='.2s'
         )
         fig.update_layout(height=450, xaxis_tickangle=45)
         st.plotly_chart(fig, use_container_width=True)
     
-    return resumen
+    # ============================================
+    # 4. OPCIÓN DE DESCARGA
+    # ============================================
+    csv = resumen.to_csv(index=False)
+    st.download_button(
+        "📥 Descargar detalle de clasificadores (CSV)",
+        csv,
+        f"clasificadores_{generica_seleccionada.replace(' ', '_')}.csv",
+        "text/csv"
+    )
 
 def crear_tabla_resumen(df_filtrado):
     """
-    Crea una tabla resumen con selector de genérica para ver detalle de clasificadores
+    Crea una tabla resumen interactiva donde al hacer clic se muestra el detalle
     """
     st.subheader("📊 Resumen por Genérica")
+    st.caption("💡 **Haga clic en cualquier genérica** para ver el desglose de sus clasificadores")
     
     # ============================================
     # 1. CREAR TABLA RESUMEN
@@ -228,56 +184,41 @@ def crear_tabla_resumen(df_filtrado):
             resumen_display[col] = resumen_display[col].apply(lambda x: f"S/ {x:,.0f}")
     resumen_display["%_Ejecucion"] = resumen_display["%_Ejecucion"].apply(lambda x: f"{x:.1f}%")
     
-    # Mostrar tabla
-    st.dataframe(
-        resumen_display,
-        use_container_width=True,
-        column_config={
-            "generica": st.column_config.TextColumn("Genérica", width="medium"),
-        }
-    )
-    
     # ============================================
-    # 2. DRILLDOWN - Selección de genérica
+    # 2. MOSTRAR TABLA CON BOTONES POR FILA
     # ============================================
-    st.markdown("---")
-    st.markdown("### 🔍 Desglose por clasificador de gasto")
-    st.markdown("Seleccione una genérica para ver sus clasificadores más relevantes (ordenados por PIM):")
+    # Inicializar session_state para controlar qué genérica está seleccionada
+    if "generica_seleccionada_detalle" not in st.session_state:
+        st.session_state.generica_seleccionada_detalle = None
     
-    # Opciones de genérica (excluyendo TOTAL)
-    opciones_genericas = resumen[resumen["generica"] != "TOTAL"]["generica"].tolist()
-    
-    col1, col2 = st.columns([2, 1])
-    with col1:
-        generica_seleccionada = st.selectbox(
-            "📌 Seleccionar Genérica:",
-            options=opciones_genericas,
-            key="drilldown_generica"
-        )
-    
-    # Detectar tipos de clasificador disponibles
-    with col2:
-        posibles_clasificadores = detectar_columnas_clasificador(df_filtrado)
+    # Mostrar cada fila con un botón "Ver detalle"
+    for idx, row in resumen_display.iterrows():
+        generica = row["generica"]
         
-        if posibles_clasificadores:
-            clasificador_seleccionado = st.selectbox(
-                "📂 Tipo de clasificador:",
-                options=posibles_clasificadores,
-                key="tipo_clasificador"
-            )
-        else:
-            st.warning("No se encontraron columnas de clasificadores en los datos")
-            clasificador_seleccionado = None
-    
-    # ============================================
-    # 3. MOSTRAR DETALLE
-    # ============================================
-    if generica_seleccionada and clasificador_seleccionado:
-        with st.expander(f"📋 Ver detalle para {generica_seleccionada}", expanded=True):
-            mostrar_detalle_clasificadores(
-                df_filtrado, 
-                generica_seleccionada, 
-                clasificador_seleccionado
-            )
+        # Crear columnas: [Botón, Datos de la fila]
+        col1, col2 = st.columns([1, 8])
+        
+        with col1:
+            # Botón para ver detalle
+            if st.button(f"🔍", key=f"btn_{generica}", help=f"Ver detalle de {generica}"):
+                if st.session_state.generica_seleccionada_detalle == generica:
+                    st.session_state.generica_seleccionada_detalle = None  # Cerrar
+                else:
+                    st.session_state.generica_seleccionada_detalle = generica  # Abrir
+                st.rerun()
+        
+        with col2:
+            # Mostrar la fila como texto formateado
+            cols_data = st.columns(len(row))
+            for i, (col_name, col_value) in enumerate(row.items()):
+                with cols_data[i]:
+                    if col_name == "generica":
+                        st.markdown(f"**{col_value}**")
+                    else:
+                        st.write(col_value)
+        
+        # Si esta genérica está seleccionada, mostrar el detalle debajo
+        if st.session_state.generica_seleccionada_detalle == generica and generica != "TOTAL":
+            mostrar_detalle_clasificadores(df_filtrado, generica)
     
     return resumen
