@@ -1,7 +1,6 @@
 # components/summary_table.py
 import streamlit as st
 import pandas as pd
-import plotly.express as px
 import math
 
 
@@ -126,11 +125,10 @@ def mostrar_detalle_clasificadores(df_filtrado: pd.DataFrame, generica_seleccion
     total_clasificadores = len(resumen)
     top_n_pareto = max(1, math.ceil(total_clasificadores * 0.20))
 
-    # Mostrar indicadores de contexto
-    col_a, col_b, col_c = st.columns(3)
-    col_a.metric("Total clasificadores", total_clasificadores)
-    col_b.metric("Mostrando Top 20%", top_n_pareto)
-    col_c.metric("PIM Total", f"S/ {total_pim:,.0f}")
+    # Mostrar indicadores de contexto (apilados — se ven bien en móvil)
+    st.metric("Total clasificadores", total_clasificadores)
+    st.metric("Mostrando Top 20%", top_n_pareto)
+    st.metric("PIM Total", f"S/ {total_pim:,.0f}")
 
     resumen_pareto = resumen.head(top_n_pareto).copy()
 
@@ -180,36 +178,7 @@ def mostrar_detalle_clasificadores(df_filtrado: pd.DataFrame, generica_seleccion
         column_config=column_config,
     )
 
-    # ── 5. Gráfico de barras (Top 20%) ───────────────────────
-    if len(resumen_pareto) > 1 and "PIM" in resumen_pareto.columns:
-        st.subheader(f"Distribución PIM — Top 20% de Clasificadores")
-
-        fig_df = resumen_pareto.copy()
-        # Etiqueta corta para el eje X
-        fig_df["etiqueta"] = (
-            fig_df["clasificador_codigo"] + "\n" +
-            fig_df["clasificador_nombre"].str[:35]
-        )
-
-        fig = px.bar(
-            fig_df,
-            x="etiqueta",
-            y="PIM",
-            color="%_Ejecucion" if "%_Ejecucion" in fig_df.columns else None,
-            color_continuous_scale="RdYlGn",
-            range_color=[0, 100],
-            title=f"Top 20% clasificadores — {generica_seleccionada}",
-            labels={"PIM": "Monto (Soles)", "etiqueta": "Clasificador", "%_Ejecucion": "% Ejecución"},
-            text_auto=".2s",
-        )
-        fig.update_layout(
-            height=480,
-            xaxis_tickangle=40,
-            coloraxis_colorbar=dict(title="% Ejec."),
-        )
-        st.plotly_chart(fig, use_container_width=True)
-
-    # ── 6. Descarga del Top 20% ───────────────────────────────
+    # ── 5. Descarga del Top 20% ───────────────────────────────
     csv = resumen_pareto.to_csv(index=False)
     st.download_button(
         "📥 Descargar Top 20% clasificadores (CSV)",
@@ -277,57 +246,41 @@ def crear_tabla_resumen(df_filtrado: pd.DataFrame):
     if "generica_seleccionada_detalle" not in st.session_state:
         st.session_state.generica_seleccionada_detalle = None
 
-    # ── 3. Encabezado de columnas ─────────────────────────────
-    COLS_ORDEN = ["generica"] + [
+    # ── 3. Tabla resumen (scroll horizontal nativo en móvil) ──
+    COLS_TABLA = ["generica"] + [
         c for c in ["PIM", "Certificado", "PIM_-_Certificado",
                     "Compromiso_Anual", "Devengado_Total", "Saldo", "%_Ejecucion"]
         if c in resumen_display.columns
     ]
-    HEADERS = {
-        "generica": "Genérica", "PIM": "PIM", "Certificado": "Certificado",
-        "PIM_-_Certificado": "PIM - Cert.", "Compromiso_Anual": "Compromiso",
+    RENAME = {
+        "generica": "Genérica", "PIM": "PIM", "Certificado": "Cert.",
+        "PIM_-_Certificado": "PIM-Cert.", "Compromiso_Anual": "Compromiso",
         "Devengado_Total": "Devengado", "Saldo": "Saldo", "%_Ejecucion": "% Ejec.",
     }
 
-    header_cols = st.columns([1] + [3 if c == "generica" else 2 for c in COLS_ORDEN])
-    header_cols[0].markdown("**Detalle**")
-    for i, col in enumerate(COLS_ORDEN, start=1):
-        header_cols[i].markdown(f"**{HEADERS.get(col, col)}**")
+    st.dataframe(
+        resumen_display[COLS_TABLA].rename(columns=RENAME),
+        use_container_width=True,
+        hide_index=True,
+    )
 
     st.divider()
 
-    # ── 4. Filas con botón drill-down ─────────────────────────
-    for _, row in resumen_display.iterrows():
-        generica = row["generica"]
-        is_total = generica == "TOTAL"
-        is_selected = st.session_state.generica_seleccionada_detalle == generica
+    # ── 4. Selectbox drill-down (funciona perfectamente en móvil) ──
+    genericas_disponibles = [g for g in resumen["generica"].tolist() if g != "TOTAL"]
 
-        row_cols = st.columns([1] + [3 if c == "generica" else 2 for c in COLS_ORDEN])
+    seleccion = st.selectbox(
+        "🔍 Ver desglose de clasificadores (Top 20% PIM)",
+        options=["— Seleccione una genérica —"] + genericas_disponibles,
+        index=0,
+        key="selectbox_generica_drill",
+    )
 
-        # Botón (solo para filas que no son TOTAL)
-        with row_cols[0]:
-            if not is_total:
-                icon = "🔼" if is_selected else "🔍"
-                if st.button(icon, key=f"btn_{generica}", help=f"Ver / ocultar detalle de {generica}"):
-                    st.session_state.generica_seleccionada_detalle = (
-                        None if is_selected else generica
-                    )
-                    st.rerun()
-            else:
-                st.write("—")
+    generica_elegida = None if seleccion.startswith("—") else seleccion
+    st.session_state.generica_seleccionada_detalle = generica_elegida
 
-        for i, col in enumerate(COLS_ORDEN, start=1):
-            with row_cols[i]:
-                val = row.get(col, "")
-                if is_total:
-                    st.markdown(f"**{val}**")
-                elif col == "generica":
-                    st.markdown(f"{'🔵 ' if is_selected else ''}{val}")
-                else:
-                    st.write(val)
-
-        # Drill-down inline debajo de la fila seleccionada
-        if is_selected and not is_total:
-            mostrar_detalle_clasificadores(df_filtrado, generica)
+    # Drill-down debajo del selector
+    if generica_elegida:
+        mostrar_detalle_clasificadores(df_filtrado, generica_elegida)
 
     return resumen
