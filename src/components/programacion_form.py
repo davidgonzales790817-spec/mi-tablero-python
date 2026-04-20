@@ -1,164 +1,195 @@
-# components/programacion_form.py
-import streamlit as st
-import pandas as pd
-import os
-from datetime import datetime
-from config import MESES
+# src/components/programacion_form.py
+# ─────────────────────────────────────────────────────────────────────────────
+# Formulario de programación mensual editable
+# Pre-cargado con los datos oficiales de IPEN 2026
+# ─────────────────────────────────────────────────────────────────────────────
 
-def inicializar_programacion(genericas_ordenadas):
+import os
+import pandas as pd
+import streamlit as st
+from config import MESES, CARPETA_DATA, PROGRAMACION_PRECARGADA
+
+
+# ── Persistencia ──────────────────────────────────────────────────────────────
+
+_ARCHIVO_PROG = "programacion_actual.json"
+
+
+def _ruta_prog() -> str:
+    os.makedirs(CARPETA_DATA, exist_ok=True)
+    return os.path.join(CARPETA_DATA, _ARCHIVO_PROG)
+
+
+def guardar_programacion_csv(df: pd.DataFrame) -> tuple[bool, str]:
+    """Guarda la programación en JSON dentro de Respaldo_Data/."""
+    try:
+        df.to_json(_ruta_prog(), orient="index")
+        return True, _ruta_prog()
+    except Exception as e:
+        return False, str(e)
+
+
+def cargar_programacion_csv() -> tuple[bool, pd.DataFrame | str]:
+    """Carga la programación guardada desde JSON."""
+    ruta = _ruta_prog()
+    if os.path.exists(ruta):
+        try:
+            return True, pd.read_json(ruta, orient="index")
+        except Exception as e:
+            return False, str(e)
+    return False, "No hay programación guardada."
+
+
+# ── Inicialización ────────────────────────────────────────────────────────────
+
+def inicializar_programacion(genericas_ordenadas: list[str]) -> pd.DataFrame:
     """
-    Inicializa la estructura de datos para la programación mensual
+    Construye (o recupera de session_state) el DataFrame de programación.
+    Los datos precargados vienen de PROGRAMACION_PRECARGADA (config.py).
     """
     if "programacion_mensual" not in st.session_state:
-        # Crear DataFrame con genéricas como índice y meses como columnas
-        df_prog = pd.DataFrame(
-            0.0,
-            index=genericas_ordenadas,
-            columns=MESES
-        )
-        st.session_state.programacion_mensual = df_prog
-    
-    # Si hay nuevas genéricas, agregarlas
-    df_actual = st.session_state.programacion_mensual
-    for gen in genericas_ordenadas:
-        if gen not in df_actual.index:
-            # Agregar nueva fila con ceros
-            nueva_fila = pd.DataFrame(0.0, index=[gen], columns=MESES)
-            df_actual = pd.concat([df_actual, nueva_fila])
-    
-    # Limpiar genéricas que ya no existen
-    df_actual = df_actual[df_actual.index.isin(genericas_ordenadas + list(df_actual.index))]
-    
-    st.session_state.programacion_mensual = df_actual
+        filas = {}
+        for gen in genericas_ordenadas:
+            # Coincidencia por número de genérica (clave "1.", "2.", …)
+            prefijo = gen.split(".")[0]
+            fila    = {mes: 0.0 for mes in MESES}
+            for key, valores in PROGRAMACION_PRECARGADA.items():
+                if key.split(".")[0] == prefijo:
+                    fila = {mes: float(valores.get(mes, 0)) for mes in MESES}
+                    break
+            filas[gen] = fila
+
+        st.session_state.programacion_mensual = pd.DataFrame(filas, index=MESES).T
+
+    else:
+        # Añadir genéricas nuevas que puedan aparecer tras un cambio de archivo
+        df_actual = st.session_state.programacion_mensual
+        for gen in genericas_ordenadas:
+            if gen not in df_actual.index:
+                df_actual.loc[gen] = 0.0
+        st.session_state.programacion_mensual = df_actual
+
     return st.session_state.programacion_mensual
 
-def guardar_programacion_csv(df_programacion):
-    """
-    Guarda la programación en un archivo CSV dentro de Respaldo_Data
-    """
-    try:
-        # Crear carpeta si no existe
-        os.makedirs("Respaldo_Data", exist_ok=True)
-        
-        # Guardar como "programacion_actual.csv"
-        df_programacion.to_csv("Respaldo_Data/programacion_actual.csv")
-        
-        return True, "Respaldo_Data/programacion_actual.csv"
-    except Exception as e:
-        return False, str(e)
 
-def cargar_programacion_csv():
-    """
-    Carga la última programación guardada
-    """
-    try:
-        ruta = "Respaldo_Data/programacion_actual.csv"
-        if os.path.exists(ruta):
-            df = pd.read_csv(ruta, index_col=0)
-            return True, df
-        return False, "No hay programación guardada"
-    except Exception as e:
-        return False, str(e)
+# ── Widget de resumen en sidebar ──────────────────────────────────────────────
 
-def mostrar_formulario_programacion(genericas_ordenadas):
-    """
-    Muestra el formulario para ingresar programación mensual por genérica
-    """
-    # Inicializar programación
-    df_programacion = inicializar_programacion(genericas_ordenadas)
-    
-    st.sidebar.markdown("---")
-    st.sidebar.subheader("📅 Programación Mensual")
-    
-    # Botón para abrir el formulario
-    with st.sidebar.expander("✏️ Ingresar Programación por Genérica", expanded=False):
-        st.markdown("### Programación de Metas Mensuales")
-        st.markdown("Ingrese los montos programados (en Soles) para cada genérica y mes:")
-        
-        # Opciones de carga/guardado
-        col1, col2 = st.columns(2)
-        with col1:
-            if st.button("📂 Cargar última programación"):
-                success, result = cargar_programacion_csv()
-                if success:
-                    st.session_state.programacion_mensual = result
-                    st.success("Programación cargada correctamente")
-                    st.rerun()
-                else:
-                    st.warning(result)
-        
-        with col2:
-            if st.button("🔄 Reiniciar todo a cero"):
-                df_programacion = pd.DataFrame(0.0, index=genericas_ordenadas, columns=MESES)
-                st.session_state.programacion_mensual = df_programacion
-                st.success("Programación reiniciada a cero")
-                st.rerun()
-        
+def mostrar_resumen_sidebar():
+    """Muestra un resumen compacto de la programación en el sidebar."""
+    if "programacion_mensual" not in st.session_state:
+        return
+    df = st.session_state.programacion_mensual
+    with st.sidebar.expander("📊 Resumen programación", expanded=False):
+        for gen in df.index:
+            total = df.loc[gen].sum()
+            if total > 0:
+                st.metric(gen[:30], f"S/ {round(total):,}".replace(",", "."))
         st.markdown("---")
-        
-        # Formulario editable
-        df_editado = df_programacion.copy()
-        
-        # Para cada genérica, crear una fila de inputs
+        total_anual = df.sum().sum()
+        st.metric("Total anual", f"S/ {round(total_anual):,}".replace(",", "."))
+
+
+# ── Getter para el gráfico mensual ────────────────────────────────────────────
+
+def obtener_programacion_df() -> pd.DataFrame | None:
+    """Devuelve el DataFrame de programación o None si no existe."""
+    return st.session_state.get("programacion_mensual", None)
+
+
+# ── Formulario principal ──────────────────────────────────────────────────────
+
+def mostrar_formulario_programacion(genericas_ordenadas: list[str]):
+    """
+    Renderiza el formulario editable de programación mensual.
+    Incluye controles de carga, guardado y exportación.
+    """
+    st.subheader("📅 Programación Mensual por Genérica")
+    st.caption(
+        "Montos en Soles. Los datos precargados corresponden a la programación oficial IPEN 2026. "
+        "Edita los valores y presiona **Guardar** para persistirlos."
+    )
+
+    df_prog = inicializar_programacion(genericas_ordenadas)
+
+    # ── Controles superiores ──────────────────────────────────────────────────
+    c1, c2, c3 = st.columns(3)
+    with c1:
+        if st.button("📂 Cargar última guardada", use_container_width=True):
+            ok, result = cargar_programacion_csv()
+            if ok:
+                st.session_state.programacion_mensual = result
+                st.success("Programación cargada.")
+                st.rerun()
+            else:
+                st.warning(result)
+    with c2:
+        if st.button("🔄 Restaurar datos precargados", use_container_width=True,
+                     help="Vuelve a los valores de la tabla oficial IPEN 2026"):
+            st.session_state.pop("programacion_mensual", None)
+            st.rerun()
+    with c3:
+        if st.button("🗑️ Poner todo en cero", use_container_width=True):
+            st.session_state.programacion_mensual = pd.DataFrame(
+                0.0, index=genericas_ordenadas, columns=MESES
+            )
+            st.rerun()
+
+    st.markdown("---")
+
+    # ── Formulario de edición ─────────────────────────────────────────────────
+    df_editado = df_prog.copy()
+
+    with st.form("form_programacion_mensual"):
         for gen in genericas_ordenadas:
             st.markdown(f"**{gen}**")
-            cols = st.columns(len(MESES))
-            for i, mes in enumerate(MESES):
-                valor_actual = df_programacion.loc[gen, mes] if gen in df_programacion.index else 0
-                with cols[i]:
-                    nuevo_valor = st.number_input(
-                        mes[:3],  # Abreviatura del mes
-                        value=float(valor_actual),
-                        step=1000.0,
-                        format="%.0f",
-                        key=f"prog_{gen}_{mes}",
-                        label_visibility="collapsed"
-                    )
-                    df_editado.loc[gen, mes] = nuevo_valor
+            # Primera mitad del año
+            cols_h1 = st.columns(6)
+            for i, mes in enumerate(MESES[:6]):
+                val = float(df_prog.loc[gen, mes]) if gen in df_prog.index else 0.0
+                df_editado.loc[gen, mes] = cols_h1[i].number_input(
+                    mes[:3], value=val, step=1_000.0, format="%.0f",
+                    key=f"prog_{gen[:15]}_{mes[:3]}_1",
+                )
+            # Segunda mitad del año
+            cols_h2 = st.columns(6)
+            for i, mes in enumerate(MESES[6:]):
+                val = float(df_prog.loc[gen, mes]) if gen in df_prog.index else 0.0
+                df_editado.loc[gen, mes] = cols_h2[i].number_input(
+                    mes[:3], value=val, step=1_000.0, format="%.0f",
+                    key=f"prog_{gen[:15]}_{mes[:3]}_2",
+                )
             st.markdown("---")
-        
-        # Botones de acción
-        col_guardar, col_cancelar = st.columns(2)
-        with col_guardar:
-            if st.button("💾 Guardar Programación", type="primary", use_container_width=True):
-                st.session_state.programacion_mensual = df_editado
-                success, result = guardar_programacion_csv(df_editado)
-                if success:
-                    st.success(f"Programación guardada correctamente")
-                else:
-                    st.error(f"Error al guardar: {result}")
-                st.rerun()
-        
-        with col_cancelar:
-            if st.button("❌ Cancelar", use_container_width=True):
-                st.rerun()
-    
-    # Mostrar resumen de la programación actual
-    if "programacion_mensual" in st.session_state:
-        with st.sidebar.expander("📊 Resumen de Programación Actual", expanded=False):
-            df_prog = st.session_state.programacion_mensual
-            
-            # Total por genérica
-            st.markdown("**Total por Genérica:**")
-            for gen in df_prog.index:
-                total_gen = df_prog.loc[gen].sum()
-                st.metric(gen, f"S/ {total_gen:,.0f}")
-            
-            st.markdown("---")
-            
-            # Total mensual (para la línea)
-            totales_mensuales = df_prog.sum(axis=0)
-            st.markdown("**Meta Total Mensual (Línea):**")
-            for mes in MESES:
-                st.metric(mes, f"S/ {totales_mensuales[mes]:,.0f}")
 
-def obtener_meta_total_mensual():
-    """
-    Retorna un diccionario con la meta total mensual (suma de todas las genéricas)
-    """
-    if "programacion_mensual" in st.session_state:
-        df_prog = st.session_state.programacion_mensual
-        return df_prog.sum(axis=0).to_dict()
-    else:
-        # Si no hay programación, retornar ceros
-        return {mes: 0 for mes in MESES}
+        if st.form_submit_button("💾 Guardar Programación", type="primary",
+                                  use_container_width=True):
+            st.session_state.programacion_mensual = df_editado
+            ok, ruta = guardar_programacion_csv(df_editado)
+            if ok:
+                st.success(f"✅ Guardado en `{ruta}`")
+            else:
+                st.error(f"Error al guardar: {ruta}")
+            st.rerun()
+
+    # ── Tabla resumen ─────────────────────────────────────────────────────────
+    with st.expander("📊 Ver tabla resumen de programación", expanded=False):
+        df_show = st.session_state.programacion_mensual.copy()
+
+        total_row          = df_show.sum(axis=0).to_frame().T
+        total_row.index    = ["TOTAL"]
+        df_show            = pd.concat([df_show, total_row])
+        df_show["TOTAL AÑO"] = df_show.sum(axis=1)
+
+        fmt = lambda x: f"S/ {round(x):,}".replace(",", ".")
+        df_fmt = df_show.copy()
+        for col in df_fmt.columns:
+            df_fmt[col] = df_fmt[col].apply(fmt)
+
+        st.dataframe(df_fmt, use_container_width=True)
+
+        csv_bytes = df_show.to_csv().encode("utf-8")
+        st.download_button(
+            "📥 Descargar programación (CSV)",
+            csv_bytes,
+            "programacion_mensual.csv",
+            "text/csv",
+        )
