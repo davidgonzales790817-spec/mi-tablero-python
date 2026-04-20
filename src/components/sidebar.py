@@ -1,154 +1,97 @@
-# components/sidebar.py
+# src/components/sidebar.py
+# ─────────────────────────────────────────────────────────────────────────────
+# Barra lateral: logo + filtros dinámicos
+# ─────────────────────────────────────────────────────────────────────────────
+
+import pandas as pd
 import streamlit as st
 from config import LOGO_URL
 
-def mostrar_logo():
-    st.sidebar.image(LOGO_URL, width=250)
 
-def crear_filtros(df):
+def mostrar_logo():
+    st.sidebar.image(LOGO_URL, width=220)
+
+
+def _multiselect(label: str, df_global: pd.DataFrame, df_filtrado: pd.DataFrame,
+                  col: str, key: str) -> pd.DataFrame:
+    """Genera un multiselect para una columna y aplica el filtro."""
+    if col not in df_global.columns:
+        return df_filtrado
+    st.sidebar.subheader(label)
+    opts = sorted(df_global[col].dropna().unique().tolist())
+    sel  = st.sidebar.multiselect(
+        f"Seleccionar {label}:", opts, default=[], key=key,
+        placeholder="(vacío = mostrar todos)",
+    )
+    if sel:
+        return df_filtrado[df_filtrado[col].isin(sel)]
+    return df_filtrado
+
+
+def crear_filtros(df: pd.DataFrame) -> pd.DataFrame:
     """
-    Crea los filtros en la barra lateral usando multiselect
+    Construye los filtros de la barra lateral y devuelve el DataFrame
+    filtrado según las selecciones del usuario.
     """
     st.sidebar.header("🔍 Filtros")
-    
-    df_filtrado = df.copy()
-    
-    # ============================================
-    # 1. FILTRO POR GENÉRICA
-    # ============================================
-    if "generica" in df.columns:
-        st.sidebar.subheader("📂 Genérica")
-        opciones = sorted(df["generica"].dropna().unique().tolist())
-        
-        seleccion = st.sidebar.multiselect(
-            "Seleccionar Genéricas:",
-            options=opciones,
-            default=[],
-            key="multiselect_generica",
-            placeholder="Ninguna seleccionada = mostrar todas"
-        )
-        
-        if seleccion:
-            df_filtrado = df_filtrado[df_filtrado["generica"].isin(seleccion)]
-    
-    # ============================================
-    # 2. FILTRO POR UNIDAD EJECUTORA
-    # ============================================
-    if "unidad_ejecutora" in df.columns:
-        st.sidebar.subheader("🏛️ Unidad Ejecutora")
-        opciones = sorted(df["unidad_ejecutora"].dropna().unique().tolist())
-        
-        seleccion = st.sidebar.multiselect(
-            "Seleccionar Unidades Ejecutoras:",
-            options=opciones,
-            default=[],
-            key="multiselect_ue",
-            placeholder="Ninguna seleccionada = mostrar todas"
-        )
-        
-        if seleccion:
-            df_filtrado = df_filtrado[df_filtrado["unidad_ejecutora"].isin(seleccion)]
-    
-    # ============================================
-    # 3. FILTRO POR RUBRO DE FINANCIAMIENTO
-    # ============================================
-    col_rubro = None
-    for col in df.columns:
-        if any(p in col.lower() for p in ["rubro", "financiamiento", "fuente"]):
-            col_rubro = col
-            break
-    
+    df_f = df.copy()
+
+    # 1. Genérica
+    df_f = _multiselect("Genérica", df, df_f, "generica", "flt_generica")
+
+    # 2. Unidad Ejecutora
+    df_f = _multiselect("Unidad Ejecutora", df, df_f, "unidad_ejecutora", "flt_ue")
+
+    # 3. Rubro / Fuente de financiamiento
+    col_rubro = next(
+        (c for c in df.columns if any(p in c.lower() for p in ["rubro", "fuente", "financ"])),
+        None,
+    )
     if col_rubro:
-        st.sidebar.subheader("💰 Rubro de Financiamiento")
-        opciones = sorted(df[col_rubro].dropna().unique().tolist())
-        
-        seleccion = st.sidebar.multiselect(
-            "Seleccionar Rubros:",
-            options=opciones,
-            default=[],
-            key="multiselect_rubro",
-            placeholder="Ninguna seleccionada = mostrar todos"
+        df_f = _multiselect("Rubro / Fuente", df, df_f, col_rubro, "flt_rubro")
+
+    # 4. Proyecto / Actividad
+    col_proy = next(
+        (c for c in df.columns if any(p in c.lower() for p in ["producto_proyecto", "actividad", "activ_obra"])),
+        None,
+    )
+    if col_proy:
+        st.sidebar.subheader("Proyecto / Actividad")
+        opts_p = sorted(df[col_proy].dropna().unique().tolist())
+        if len(opts_p) > 100:
+            st.sidebar.caption(f"Mostrando top-100 de {len(opts_p)} disponibles.")
+            opts_p = df[col_proy].value_counts().head(100).index.tolist()
+        sel_p = st.sidebar.multiselect(
+            "Seleccionar:", opts_p, default=[], key="flt_proyecto",
+            placeholder="(vacío = todos)",
         )
-        
-        if seleccion:
-            df_filtrado = df_filtrado[df_filtrado[col_rubro].isin(seleccion)]
-    
-    # ============================================
-    # 4. FILTRO POR PROYECTO/ACTIVIDAD
-    # ============================================
-    col_proyecto = None
-    for col in df.columns:
-        if any(p in col.lower() for p in ["proyecto", "actividad"]):
-            col_proyecto = col
-            break
-    
-    if col_proyecto:
-        st.sidebar.subheader("📋 Proyecto / Actividad")
-        opciones = sorted(df[col_proyecto].dropna().unique().tolist())
-        
-        if len(opciones) > 100:
-            st.sidebar.warning(f"Hay {len(opciones)} proyectos. Mostrando los 100 más comunes.")
-            conteo = df[col_proyecto].value_counts()
-            opciones = conteo.head(100).index.tolist()
-        
-        seleccion = st.sidebar.multiselect(
-            "Seleccionar Proyectos/Actividades:",
-            options=opciones,
-            default=[],
-            key="multiselect_proyecto",
-            placeholder="Ninguna seleccionada = mostrar todos"
-        )
-        
-        if seleccion:
-            df_filtrado = df_filtrado[df_filtrado[col_proyecto].isin(seleccion)]
-    
-    # ============================================
-    # 5. FILTRO POR SEC_FUNC
-    # ============================================
-    col_sec_func = None
-    for col in df.columns:
-        if any(p in col.lower() for p in ["sec_func", "secfunc", "secuencia", "funcional"]):
-            col_sec_func = col
-            break
-    
-    if col_sec_func:
-        st.sidebar.subheader("🔢 Secuencia Funcional")
-        opciones = sorted(df[col_sec_func].dropna().unique().tolist())
-        
-        seleccion = st.sidebar.multiselect(
-            "Seleccionar Secuencias Funcionales:",
-            options=opciones,
-            default=[],
-            key="multiselect_sec",
-            placeholder="Ninguna seleccionada = mostrar todas"
-        )
-        
-        if seleccion:
-            df_filtrado = df_filtrado[df_filtrado[col_sec_func].isin(seleccion)]
-    
-    # ============================================
-    # MOSTRAR RESUMEN
-    # ============================================
+        if sel_p:
+            df_f = df_f[df_f[col_proy].isin(sel_p)]
+
+    # 5. Secuencia Funcional
+    col_sec = next(
+        (c for c in df.columns if any(p in c.lower() for p in ["sec_func", "secuencia", "funcional"])),
+        None,
+    )
+    if col_sec:
+        df_f = _multiselect("Secuencia Funcional", df, df_f, col_sec, "flt_sec_func")
+
+    # ── Resumen ───────────────────────────────────────────────────────────────
     st.sidebar.markdown("---")
-    
-    col1, col2 = st.sidebar.columns(2)
-    with col1:
-        st.metric("📊 Total registros", f"{len(df):,}")
-    with col2:
-        st.metric("✅ Registros mostrados", f"{len(df_filtrado):,}")
-    
+    c1, c2 = st.sidebar.columns(2)
+    c1.metric("Total filas",    f"{len(df):,}")
+    c2.metric("Filas visibles", f"{len(df_f):,}")
+
     if len(df) > 0:
-        porcentaje = (len(df_filtrado) / len(df)) * 100
-        st.sidebar.progress(porcentaje / 100)
-        st.sidebar.caption(f"{porcentaje:.1f}% del total")
-    
+        pct = len(df_f) / len(df)
+        st.sidebar.progress(pct)
+        st.sidebar.caption(f"{pct * 100:.1f}% del total")
+
     st.sidebar.markdown("---")
-    
-    # ============================================
-    # BOTÓN DE LIMPIEZA - VERSIÓN RECARGA DE PÁGINA
-    # ============================================
+
     if st.sidebar.button("🗑️ Limpiar todos los filtros", use_container_width=True):
-        # Esta línea fuerza la recarga completa de la página
-        st.markdown('<meta http-equiv="refresh" content="0">', unsafe_allow_html=True)
-    
-    return df_filtrado
+        for k in ["flt_generica", "flt_ue", "flt_rubro", "flt_proyecto", "flt_sec_func"]:
+            st.session_state.pop(k, None)
+        st.rerun()
+
+    return df_f
