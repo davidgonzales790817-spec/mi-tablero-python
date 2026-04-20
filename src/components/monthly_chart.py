@@ -1,205 +1,188 @@
-# components/monthly_chart.py
+# src/components/monthly_chart.py
+# ─────────────────────────────────────────────────────────────────────────────
+# Gráfico de evolución mensual del devengado por genérica
+# con línea de comparación contra la programación
+# ─────────────────────────────────────────────────────────────────────────────
+
 import pandas as pd
 import streamlit as st
 import plotly.graph_objects as go
-import plotly.express as px
 from config import MESES, COLORES_GENERICAS
 
-def preparar_datos_grafico(df_filtrado, columnas_devengado):
-    """
-    Prepara los datos para el gráfico de evolución mensual.
-    Ahora incluye todos los meses, incluso si tienen valor cero.
-    """
-    datos_grafico = []
-    genericas_ordenadas = sorted(df_filtrado["generica"].unique())
-    
-    # Crear un diccionario para acumular montos por genérica y mes
-    acumulado = {gen: {mes: 0 for mes in MESES} for gen in genericas_ordenadas}
-    
-    # Acumular los montos reales
-    for generica in genericas_ordenadas:
-        df_gen = df_filtrado[df_filtrado["generica"] == generica]
-        for mes_col in columnas_devengado:
-            nombre_mes = mes_col.replace("Devengado_", "")
-            if nombre_mes in MESES:
-                monto = df_gen[mes_col].sum()
-                acumulado[generica][nombre_mes] += monto
-    
-    # Convertir a lista de diccionarios para el DataFrame
-    for generica in genericas_ordenadas:
-        for mes in MESES:
-            monto = acumulado[generica][mes]
-            datos_grafico.append({
-                "generica": generica,
-                "mes": mes,
-                "monto": monto
-            })
-    
-    df_grafico = pd.DataFrame(datos_grafico)
-    
-    # Ordenar por mes cronológicamente
-    df_grafico["mes"] = pd.Categorical(df_grafico["mes"], categories=MESES, ordered=True)
-    df_grafico = df_grafico.sort_values(["mes", "generica"])
-    
-    return df_grafico, genericas_ordenadas
 
-def determinar_escala(df_grafico):
-    """
-    Determina la escala adecuada para los montos
-    """
-    max_monto = df_grafico["monto"].max()
-    
-    if max_monto > 1e6:
-        factor = 1e6
-        unidad = "Millones S/"
-        formato_total = lambda x: f"S/ {x/1e6:.2f}M"
-    elif max_monto > 1e3:
-        factor = 1e3
-        unidad = "Miles S/"
-        formato_total = lambda x: f"S/ {x/1e3:.1f}K"
-    else:
-        factor = 1
-        unidad = "Soles"
-        formato_total = lambda x: f"S/ {x:,.0f}"
-    
-    return factor, unidad, formato_total
+def _determinar_escala(max_val: float) -> tuple[float, str]:
+    if max_val > 1e6:
+        return 1e6, "Millones S/"
+    if max_val > 1e3:
+        return 1e3, "Miles S/"
+    return 1, "Soles"
 
-def crear_grafico_mensual(df_filtrado, columnas_devengado):
+
+def _fmt_soles(valor: float) -> str:
+    return f"S/ {round(valor):,}".replace(",", ".")
+
+
+def preparar_datos_grafico(
+    df_filtrado: pd.DataFrame,
+    columnas_devengado: list[str],
+) -> tuple[pd.DataFrame, list[str]]:
     """
-    Crea y muestra el gráfico de evolución mensual
+    Construye un DataFrame pivotado con el devengado mensual por genérica,
+    garantizando que todos los meses del año aparezcan (incluidos los ceros).
+    """
+    genericas = sorted(df_filtrado["generica"].unique())
+
+    filas = []
+    for mes_col in columnas_devengado:
+        nombre_mes = mes_col.replace("Devengado_", "")
+        if nombre_mes not in MESES:
+            continue
+        fila = {"mes": nombre_mes}
+        for gen in genericas:
+            fila[gen] = df_filtrado[df_filtrado["generica"] == gen][mes_col].sum()
+        filas.append(fila)
+
+    # Completar meses sin datos
+    meses_en_datos = {f["mes"] for f in filas}
+    for mes in MESES:
+        if mes not in meses_en_datos:
+            fila = {"mes": mes}
+            for gen in genericas:
+                fila[gen] = 0
+            filas.append(fila)
+
+    df_graf = pd.DataFrame(filas)
+    df_graf["mes"] = pd.Categorical(df_graf["mes"], categories=MESES, ordered=True)
+    df_graf = df_graf.sort_values("mes").reset_index(drop=True)
+
+    return df_graf, genericas
+
+
+def crear_grafico_mensual(
+    df_filtrado: pd.DataFrame,
+    columnas_devengado: list[str],
+    df_programacion: pd.DataFrame | None = None,
+):
+    """
+    Renderiza el gráfico de barras apiladas (devengado mensual por genérica)
+    con una línea discontinua que muestra el monto programado total del mes.
     """
     st.subheader("📈 Evolución del Devengado Mensual por Genérica")
-    
-    # Preparar datos (ahora incluye todos los meses)
-    df_grafico, genericas_ordenadas = preparar_datos_grafico(df_filtrado, columnas_devengado)
-    
-    if df_grafico.empty:
-        st.warning("No hay datos para mostrar en el gráfico")
+
+    df_graf, genericas = preparar_datos_grafico(df_filtrado, columnas_devengado)
+
+    if df_graf.empty:
+        st.warning("Sin datos para el gráfico mensual.")
         return
-    
-    # Calcular totales por mes (para anotaciones)
-    totales_mes = df_grafico.groupby("mes")["monto"].sum().reset_index()
-    
-    # Determinar escala
-    factor, unidad, formato_total = determinar_escala(df_grafico)
-    df_grafico["monto_mostrar"] = df_grafico["monto"] / factor
-    
-    # Crear gráfico
+
+    # Escala
+    max_val = df_graf[genericas].sum(axis=1).max() if genericas else 0
+    factor, unidad = _determinar_escala(max_val)
+
     fig = go.Figure()
     colores = COLORES_GENERICAS
-    
-    # Agregar barras para cada genérica
-    for i, generica in enumerate(genericas_ordenadas):
-        df_gen = df_grafico[df_grafico["generica"] == generica]
-        if not df_gen.empty:
-            fig.add_trace(go.Bar(
-                name=generica,
-                x=df_gen["mes"],
-                y=df_gen["monto_mostrar"],
-                text=df_gen["monto"].apply(lambda x: f"S/ {x:,.0f}" if x > 0 else ""),
-                textposition='inside',
-                textfont_size=10,
-                marker_color=colores[i % len(colores)],
-                hovertemplate="<b>%{x}</b><br>" +
-                              f"Genérica: {generica}<br>" +
-                              "Monto: S/ %{customdata:,.0f}<br>" +
-                              "<extra></extra>",
-                customdata=df_gen["monto"].values,
-                legendrank=i
-            ))
-    
-    # Configurar layout
-    fig.update_layout(
-        barmode='stack',
-        title="Evolución Mensual del Gasto por Genérica",
-        xaxis_title="Mes",
-        yaxis_title=unidad,
-        hovermode='x unified',
-        legend_title="Genérica",
-        showlegend=True,
-        height=500,
-        legend=dict(
-            orientation="h",
-            yanchor="bottom",
-            y=1.02,
-            xanchor="right",
-            x=1
-        )
-    )
-    
-    # Agregar anotaciones de totales (solo si el total > 0)
-    for _, row in totales_mes.iterrows():
-        mes = row["mes"]
-        total = row["monto"]
-        
-        if total > 0:  # Solo mostrar anotación si hay gasto
-            if factor == 1e6:
-                y_pos = total / 1e6
-            elif factor == 1e3:
-                y_pos = total / 1e3
-            else:
-                y_pos = total
-            
-            fig.add_annotation(
-                x=mes,
-                y=y_pos,
-                text=f"<b>{formato_total(total)}</b>",
-                showarrow=False,
-                yshift=15,
-                font=dict(size=11, color="black", family="Arial Black"),
-                bgcolor="rgba(255, 255, 255, 0.9)",
-                bordercolor="black",
-                borderwidth=1,
-                borderpad=4
-            )
-    
-    # Configurar eje X para mostrar TODOS los meses
-    fig.update_xaxes(
-        tickangle=45, 
-        gridcolor='lightgray',
-        tickmode='array',
-        tickvals=MESES,
-        ticktext=MESES
-    )
-    fig.update_yaxes(gridcolor='lightgray')
-    
-    # Mostrar gráfico
-    st.plotly_chart(fig, use_container_width=True)
-    
-    # Mostrar datos detallados (opcional)
-    with st.expander("Ver datos detallados"):
-        # Tabla pivotada
-        pivot_df = df_grafico.pivot_table(
-            values='monto',
-            index='generica',
-            columns='mes',
-            aggfunc='sum',
-            fill_value=0
-        )
-        
-        # Asegurar que todos los meses aparezcan en la tabla
+
+    # Barras por genérica
+    for i, gen in enumerate(genericas):
+        vals = df_graf[gen]
+        fig.add_trace(go.Bar(
+            name=gen,
+            x=df_graf["mes"],
+            y=vals / factor,
+            customdata=vals,
+            text=vals.apply(lambda x: _fmt_soles(x) if x > 0 else ""),
+            textposition="inside",
+            textfont=dict(size=9, color="white"),
+            marker_color=colores[i % len(colores)],
+            hovertemplate=(
+                "<b>%{x}</b><br>"
+                f"{gen}<br>"
+                "S/ %{customdata:,.0f}<extra></extra>"
+            ),
+        ))
+
+    # Línea de programación total
+    if df_programacion is not None:
+        prog_vals = []
         for mes in MESES:
-            if mes not in pivot_df.columns:
-                pivot_df[mes] = 0
-        
-        # Reordenar columnas
-        pivot_df = pivot_df[MESES]
-        
-        # Ordenar filas
-        pivot_df = pivot_df.reindex(genericas_ordenadas)
-        
-        # Formatear
-        pivot_display = pivot_df.copy()
-        for col in pivot_display.columns:
-            pivot_display[col] = pivot_display[col].apply(lambda x: f"S/ {x:,.0f}")
-        
-        st.dataframe(pivot_display, use_container_width=True)
-        
-        # Botón de descarga
-        csv = df_grafico[["generica", "mes", "monto"]].to_csv(index=False)
-        st.download_button(
-            "📥 Descargar datos CSV",
-            csv,
-            "evolucion_mensual.csv",
-            "text/csv"
-        )
+            if mes in df_programacion.columns:
+                prog_vals.append(df_programacion[mes].sum())
+            else:
+                prog_vals.append(0)
+
+        fig.add_trace(go.Scatter(
+            name="Programado",
+            x=MESES,
+            y=[v / factor for v in prog_vals],
+            customdata=prog_vals,
+            mode="lines+markers",
+            line=dict(color="#1e3a5f", width=2.5, dash="dash"),
+            marker=dict(size=6, color="#1e3a5f"),
+            hovertemplate=(
+                "<b>%{x}</b><br>"
+                "Programado: S/ %{customdata:,.0f}<extra></extra>"
+            ),
+        ))
+
+    # Anotaciones de totales ejecutados
+    totales = df_graf[genericas].sum(axis=1) if genericas else pd.Series([0] * len(df_graf))
+    for mes, total in zip(df_graf["mes"], totales):
+        if total > 0:
+            fig.add_annotation(
+                x=mes, y=total / factor,
+                text=f"<b>{_fmt_soles(total)}</b>",
+                showarrow=False, yshift=14,
+                font=dict(size=10, color="#1e293b"),
+                bgcolor="rgba(255,255,255,0.88)",
+                bordercolor="#94a3b8", borderwidth=1, borderpad=3,
+            )
+
+    fig.update_layout(
+        barmode="stack",
+        xaxis=dict(
+            tickangle=30,
+            tickmode="array",
+            tickvals=MESES,
+            ticktext=MESES,
+            tickfont=dict(size=11),
+            gridcolor="#e5e7eb",
+        ),
+        yaxis=dict(title=unidad, gridcolor="#e5e7eb", tickfont=dict(size=11)),
+        legend=dict(
+            orientation="h", yanchor="bottom", y=1.02,
+            xanchor="right", x=1, font=dict(size=11),
+        ),
+        hovermode="x unified",
+        height=440,
+        margin=dict(l=10, r=10, t=65, b=55),
+        paper_bgcolor="rgba(0,0,0,0)",
+        plot_bgcolor="rgba(0,0,0,0)",
+    )
+
+    st.plotly_chart(fig, use_container_width=True)
+
+    # Tabla pivotada expandible
+    with st.expander("📋 Ver datos mensuales detallados"):
+        pivot = df_graf.set_index("mes")[genericas].copy()
+        pivot.index = pd.CategoricalIndex(pivot.index, categories=MESES, ordered=True)
+        pivot = pivot.sort_index()
+
+        # Fila TOTAL EJECUTADO
+        pivot.loc["TOTAL EJECUTADO"] = pivot.sum()
+
+        # Fila PROGRAMADO
+        if df_programacion is not None:
+            prog_row = {mes: (df_programacion[mes].sum() if mes in df_programacion.columns else 0)
+                        for mes in MESES}
+            prog_df  = pd.DataFrame([prog_row], index=["PROGRAMADO"])
+            prog_df.columns = pd.CategoricalIndex(prog_df.columns, categories=MESES, ordered=True)
+            pivot = pd.concat([pivot, prog_df])
+
+        pivot_fmt = pivot.copy()
+        for col in pivot_fmt.columns:
+            pivot_fmt[col] = pivot_fmt[col].apply(_fmt_soles)
+
+        st.dataframe(pivot_fmt, use_container_width=True)
+
+        csv = pivot.to_csv().encode("utf-8")
+        st.download_button("📥 Descargar CSV", csv, "evolucion_mensual.csv", "text/csv")
