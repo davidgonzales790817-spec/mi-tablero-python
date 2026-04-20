@@ -25,6 +25,7 @@ from components.gauges            import mostrar_indicadores
 from components.summary_table     import crear_tabla_resumen
 from components.monthly_chart     import crear_grafico_mensual
 from components.programacion_form import (
+    inicializar_programacion,
     mostrar_formulario_programacion,
     mostrar_resumen_sidebar,
     obtener_programacion_df,
@@ -170,6 +171,12 @@ def main():
         st.warning("⚠️ Sin datos para los filtros actuales.")
         return
 
+    # ── Inicializar programación ANTES de los tabs ───────────────────────────
+    # Garantiza que obtener_programacion_df() nunca devuelva None en Tab3,
+    # sin importar qué pestaña se haya visitado primero.
+    genericas_ord = sorted(df_filtrado["generica"].unique().tolist())
+    inicializar_programacion(genericas_ord)
+
     # ── Header + KPIs ─────────────────────────────────────────────────────────
     _render_header(df_proc)
     pim, cert, comp, dev = _render_kpis(df_filtrado)
@@ -190,14 +197,14 @@ def main():
     with tab2:
         crear_tabla_resumen(df_filtrado)
 
-    # ── Tab 3: Gráfico mensual ────────────────────────────────────────────────
+    # ── Tab 3: Gráfico mensual ─────────────────────────────────────────────
+    # obtener_programacion_df() siempre devuelve datos porque ya se inicializó
     with tab3:
         df_prog = obtener_programacion_df()
         crear_grafico_mensual(df_filtrado, cols_dev, df_prog)
 
     # ── Tab 4: Programación editable ──────────────────────────────────────────
     with tab4:
-        genericas_ord = sorted(df_filtrado["generica"].unique().tolist())
         mostrar_formulario_programacion(genericas_ord)
 
 
