@@ -102,11 +102,15 @@ def crear_grafico_mensual(
         ))
 
     # Línea de programación total
+    # Filtramos el df_programacion a las mismas genéricas del df_filtrado
+    # para que la línea respete los filtros laterales
     if df_programacion is not None:
+        gens_activas = [g for g in genericas if g in df_programacion.index]
+        df_prog_filtrado = df_programacion.loc[gens_activas] if gens_activas else df_programacion
         prog_vals = []
         for mes in MESES:
-            if mes in df_programacion.columns:
-                prog_vals.append(df_programacion[mes].sum())
+            if mes in df_prog_filtrado.columns:
+                prog_vals.append(df_prog_filtrado[mes].sum())
             else:
                 prog_vals.append(0)
 
