@@ -73,13 +73,18 @@ def widget_carga_archivo() -> str | None:
             help="El archivo se guarda automáticamente en Respaldo_Data/",
             key="file_uploader_main",
         )
-        if archivo:
-            ruta = guardar_archivo_repo(archivo)
-            st.success(f"Guardado: `{archivo.name}`")
-            # Forzar recarga del procesamiento
-            st.session_state.archivo_activo = ruta
-            st.session_state.df_raw = None
-            st.rerun()
+        if archivo is not None:
+            # Evitar reprocesar si ya está cargado el mismo archivo
+            archivo_anterior = st.session_state.get("archivo_activo", None)
+            ruta_nueva = os.path.join(CARPETA_DATA, archivo.name)
+            if archivo_anterior != ruta_nueva or st.session_state.get("df_raw") is None:
+                ruta = guardar_archivo_repo(archivo)
+                st.session_state.archivo_activo = ruta
+                st.session_state.df_raw = None
+                st.session_state.df_procesado = None
+                st.session_state.cols_devengado = []
+                st.success(f"✅ Cargado: `{archivo.name}`")
+                st.rerun()
 
     with tab_repo:
         if archivos_repo:
@@ -89,6 +94,8 @@ def widget_carga_archivo() -> str | None:
                 if st.button("📂 Cargar", use_container_width=True):
                     st.session_state.archivo_activo = os.path.join(CARPETA_DATA, sel)
                     st.session_state.df_raw = None
+                    st.session_state.df_procesado = None
+                    st.session_state.cols_devengado = []
                     st.rerun()
             with col2:
                 if st.button("🗑️", help="Eliminar archivo", use_container_width=True):
