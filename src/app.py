@@ -1,29 +1,46 @@
-# src/app.py
-# ─────────────────────────────────────────────────────────────────────────────
-# Tablero Presupuestal SIAF
-# Punto de entrada principal de la aplicación Streamlit
+# ═══════════════════════════════════════════════════════════════════════════════
+# src/app.py — PUNTO DE ENTRADA PRINCIPAL
+# ═══════════════════════════════════════════════════════════════════════════════
 #
-# Ejecutar desde la carpeta raíz del proyecto:
-#   streamlit run src/app.py
+# PROPÓSITO:
+#   Este es el archivo principal que ejecuta Streamlit.
+#   Cuando haces: streamlit run src/app.py
+#   Streamlit carga este archivo y ejecuta el código de arriba a abajo.
 #
-# Dependencias:
-#   pip install streamlit pandas plotly openpyxl xlrd pytz
-# ─────────────────────────────────────────────────────────────────────────────
+# FLUJO GENERAL:
+#   1. Importar todas las dependencias
+#   2. Configurar la página (ancho, tema, etc)
+#   3. Inicializar session_state (cache en memoria)
+#   4. Cargar y procesar archivo Excel (si está disponible)
+#   5. Renderizar sidebar (logo, carga archivo, filtros)
+#   6. Renderizar contenido principal (header, KPIs, 4 tabs)
+#
+# NOTA IMPORTANTE:
+#   En Fase 0 NO hay autenticación. En Fase 1, al inicio se añade:
+#   if not requerir_login():
+#       return
+#   El resto del código se deja igual, solo se agregan capas de autenticación.
+#
+# ═══════════════════════════════════════════════════════════════════════════════
 
-import pytz
-import pandas as pd
-import streamlit as st
-from datetime import datetime
+# Importar las librerías que necesitamos
+import pytz                                # Para manejo de zonas horarias
+import pandas as pd                        # Para trabajar con tablas (DataFrames)
+import streamlit as st                     # El framework web
+from datetime import datetime              # Para fecha y hora
 
+# Importar configuración centralizada
 from config import PAGE_CONFIG, CSS_EXTRA
 
-from utils.file_handler    import widget_carga_archivo
-from utils.data_processor  import DataProcessor
+# Importar utilidades (helpers)
+from utils.file_handler import widget_carga_archivo      # Widget de subir archivo
+from utils.data_processor import DataProcessor           # Pipeline de procesamiento
 
-from components.sidebar           import mostrar_logo, crear_filtros
-from components.gauges            import mostrar_indicadores
-from components.summary_table     import crear_tabla_resumen
-from components.monthly_chart     import crear_grafico_mensual
+# Importar componentes visuales (cada uno renderiza una parte de la UI)
+from components.sidebar import mostrar_logo, crear_filtros
+from components.gauges import mostrar_indicadores
+from components.summary_table import crear_tabla_resumen
+from components.monthly_chart import crear_grafico_mensual
 from components.programacion_form import (
     inicializar_programacion,
     mostrar_formulario_programacion,
@@ -31,51 +48,98 @@ from components.programacion_form import (
     obtener_programacion_df,
 )
 
-# ── Configuración de página ───────────────────────────────────────────────────
+# ═══════════════════════════════════════════════════════════════════════════════
+# CONFIGURACIÓN DE PÁGINA STREAMLIT
+# ═══════════════════════════════════════════════════════════════════════════════
+
+# Aplicar la configuración definida en config.py
 st.set_page_config(**PAGE_CONFIG)
+
+# Inyectar CSS personalizado para mejorar el look and feel
 st.markdown(CSS_EXTRA, unsafe_allow_html=True)
 
-
-# ── Inicialización de session_state ──────────────────────────────────────────
+# ═══════════════════════════════════════════════════════════════════════════════
+# INICIALIZACIÓN DEL ESTADO (SESSION_STATE)
+# ═══════════════════════════════════════════════════════════════════════════════
+#
+# Streamlit reexecuta todo el archivo cada vez que algo cambia.
+# Para evitar recalcular DataFrames, se guardan en session_state (cache en RAM).
+#
+# EXPLICACIÓN:
+# - session_state es un dict que persiste durante toda la sesión del usuario
+# - Primera vez que entra: crea las claves con valores por defecto (None)
+# - Siguientes recargas: usa lo que guardó sin recrear
 
 def _init_state():
+    """Inicializa las variables de session_state si no existen."""
     defaults = {
-        "df_raw":          None,
-        "df_procesado":    None,
-        "cols_devengado":  [],
-        "archivo_activo":  None,
+        "df_raw": None,           # DataFrame crudo del Excel (sin procesar)
+        "df_procesado": None,     # DataFrame procesado y normalizado
+        "cols_devengado": [],     # Lista de nombres de columnas de devengado
+        "archivo_activo": None,   # Ruta al archivo Excel cargado
     }
-    for k, v in defaults.items():
-        if k not in st.session_state:
-            st.session_state[k] = v
+    
+    # Iterar sobre los defaults y crear en session_state si no existen
+    for clave, valor_defecto in defaults.items():
+        if clave not in st.session_state:
+            st.session_state[clave] = valor_defecto
 
 
-# ── Carga y procesamiento del Excel ──────────────────────────────────────────
+# Llamar a inicialización al inicio del script
+_init_state()
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# FUNCIÓN: CARGAR Y PROCESAR EXCEL
+# ═══════════════════════════════════════════════════════════════════════════════
 
 def _cargar_y_procesar(ruta: str):
-    """Lee el Excel y ejecuta el pipeline de DataProcessor."""
+    """
+    Lee un Excel y ejecuta el pipeline de procesamiento.
+    
+    PARÁMETROS:
+        ruta (str): Ruta al archivo Excel (ej: "Respaldo_Data/reportes/archivo.xls")
+    
+    PASOS:
+        1. Leer archivo Excel a DataFrame
+        2. Crear DataProcessor y ejecutar pipeline
+        3. Guardar resultados en session_state
+    
+    NOTA:
+        Si algo falla, se muestra error pero no se detiene la app completamente.
+    """
+    # Importar cargar_excel desde file_handler
     from utils.file_handler import cargar_excel
+    
+    # Paso 1: Leer el Excel
     df_raw = cargar_excel(ruta)
-    if df_raw is None:
-        return
-
+    if df_raw is None:  # Si hubo error al leer
+        return  # Salir sin procesar
+    
+    # Paso 2: Crear el procesador y ejecutar pipeline
     procesador = DataProcessor(df_raw)
-    procesador.procesar_completo()
-    df_proc   = procesador.obtener_dataframe()
-    cols_dev  = procesador.obtener_columnas_devengado()
-
+    procesador.procesar_completo()  # Normalizar + detectar + calcular
+    
+    # Paso 3: Extraer resultados
+    df_proc = procesador.obtener_dataframe()      # DataFrame procesado
+    cols_dev = procesador.obtener_columnas_devengado()  # Nombres de columnas
+    
+    # Verificar si hay filas válidas después del procesamiento
     if df_proc.empty:
-        st.warning("⚠️ No hay filas válidas después del procesamiento.")
+        st.warning("⚠️ El archivo no tiene datos válidos después del procesamiento.")
         return
-
-    st.session_state.df_raw         = df_raw
-    st.session_state.df_procesado   = df_proc
+    
+    # Guardar en session_state para las próximas recargas
+    st.session_state.df_raw = df_raw
+    st.session_state.df_procesado = df_proc
     st.session_state.cols_devengado = cols_dev
 
 
-# ── Pantalla de bienvenida ────────────────────────────────────────────────────
+# ═══════════════════════════════════════════════════════════════════════════════
+# FUNCIÓN: PANTALLA DE BIENVENIDA (SIN DATOS)
+# ═══════════════════════════════════════════════════════════════════════════════
 
 def _pantalla_bienvenida():
+    """Muestra un mensaje instructivo cuando no hay datos cargados."""
     st.markdown(
         """
         <div style="text-align:center; margin-top:100px;">
@@ -85,7 +149,7 @@ def _pantalla_bienvenida():
             Formatos soportados: <code>.xls</code> y <code>.xlsx</code>
           </p>
           <p style="color:#94a3b8; font-size:13px; margin-top:24px;">
-            Los archivos se guardan automáticamente en <code>Respaldo_Data/</code>
+            Los archivos se guardan automáticamente en <code>Respaldo_Data/reportes/</code>
             y estarán disponibles para futuras sesiones.
           </p>
         </div>
@@ -94,21 +158,35 @@ def _pantalla_bienvenida():
     )
 
 
-# ── Header de la aplicación ───────────────────────────────────────────────────
+# ═══════════════════════════════════════════════════════════════════════════════
+# FUNCIÓN: HEADER DE LA PÁGINA
+# ═══════════════════════════════════════════════════════════════════════════════
 
 def _render_header(df_proc: pd.DataFrame):
-    zona_lima    = pytz.timezone("America/Lima")
-    fecha_act    = datetime.now(zona_lima).strftime("%d/%m/%Y %H:%M")
-    pliego       = df_proc["pliego"].iloc[0]  if "pliego"  in df_proc.columns else "—"
-    ano_eje      = df_proc["ano_eje"].iloc[0] if "ano_eje" in df_proc.columns else "—"
-
+    """
+    Renderiza el encabezado con institución, año y fecha de actualización.
+    
+    PARÁMETROS:
+        df_proc: DataFrame procesado (para extraer pliego y año)
+    """
+    # Obtener zona horaria de Lima y hora actual
+    zona_lima = pytz.timezone("America/Lima")
+    fecha_act = datetime.now(zona_lima).strftime("%d/%m/%Y %H:%M")
+    
+    # Extraer información del DataFrame (o valores por defecto)
+    pliego = df_proc["pliego"].iloc[0] if "pliego" in df_proc.columns else "—"
+    ano_eje = df_proc["ano_eje"].iloc[0] if "ano_eje" in df_proc.columns else "—"
+    
+    # Layout en dos columnas: título a izq, fecha a derecha
     col_h, col_f = st.columns([4, 1])
+    
     with col_h:
         st.markdown(
             f'<p class="header-sub">Ejecución Presupuestal · Año Fiscal {ano_eje}</p>'
             f'<p class="header-title">{pliego}</p>',
             unsafe_allow_html=True,
         )
+    
     with col_f:
         st.markdown(
             f'<p class="header-sub" style="text-align:right">Actualizado</p>'
@@ -116,97 +194,146 @@ def _render_header(df_proc: pd.DataFrame):
             f'{fecha_act}<br><small>hora Lima, Perú</small></p>',
             unsafe_allow_html=True,
         )
+    
+    # Línea separadora
     st.markdown("---")
 
 
-# ── KPIs superiores ───────────────────────────────────────────────────────────
+# ═══════════════════════════════════════════════════════════════════════════════
+# FUNCIÓN: KPIs (MÉTRICAS PRINCIPALES)
+# ═══════════════════════════════════════════════════════════════════════════════
 
 def _render_kpis(df: pd.DataFrame):
+    """
+    Renderiza 5 cajas de métrica con números principales.
+    
+    MÉTRICAS:
+        1. PIM (presupuesto inicial modificado)
+        2. Certificado (presupuesto certificado + % del PIM)
+        3. Compromiso (presupuesto comprometido + % del PIM)
+        4. Devengado (presupuesto ejecutado + % del PIM)
+        5. Saldo (dinero sin gastar + % sin ejecutar)
+    
+    PARÁMETROS:
+        df: DataFrame filtrado (después de aplicar filtros)
+    
+    RETORNA:
+        tuple: (pim, certificado, compromiso, devengado)
+        Se usa para pasar a los gráficos y gauges
+    """
+    # Función auxiliar para formatear números con separador de miles
+    # Convierte 1000000 → "S/ 1.000.000" (formato peruano)
     fmt = lambda v: f"S/ {round(v):,}".replace(",", ".")
-    pim   = df["PIM"].sum()
-    cert  = df["Certificado"].sum()
-    comp  = df["Compromiso_Anual"].sum()
-    dev   = df["Devengado_Total"].sum()
-    saldo = pim - dev
-
+    
+    # Sumar columnas del DataFrame
+    pim = df["PIM"].sum()                        # Presupuesto inicial
+    cert = df["Certificado"].sum()               # Certificado
+    comp = df["Compromiso_Anual"].sum()          # Compromiso
+    dev = df["Devengado_Total"].sum()            # Devengado
+    saldo = pim - dev                            # Lo que queda
+    
+    # Función auxiliar para porcentaje del PIM
     pct = lambda v: f"{v / pim * 100:.1f}% del PIM" if pim else "—"
-
+    
+    # Crear 5 columnas para mostrar las métricas
     k1, k2, k3, k4, k5 = st.columns(5)
-    k1.metric("PIM",             fmt(pim))
-    k2.metric("Certificado",     fmt(cert),  pct(cert))
-    k3.metric("Compromiso",      fmt(comp),  pct(comp))
-    k4.metric("Devengado",       fmt(dev),   pct(dev))
+    
+    k1.metric("PIM", fmt(pim))
+    k2.metric("Certificado", fmt(cert), pct(cert))
+    k3.metric("Compromiso", fmt(comp), pct(comp))
+    k4.metric("Devengado", fmt(dev), pct(dev))
     k5.metric("Saldo Pendiente", fmt(saldo), f"{saldo / pim * 100:.1f}% sin ejecutar" if pim else "—")
-
+    
     return pim, cert, comp, dev
 
 
-# ── Main ──────────────────────────────────────────────────────────────────────
+# ═══════════════════════════════════════════════════════════════════════════════
+# FUNCIÓN PRINCIPAL: main()
+# ═══════════════════════════════════════════════════════════════════════════════
+#
+# Esta es la función que Streamlit ejecuta.
+# Todo lo importante pasa aquí.
 
 def main():
-    _init_state()
-
-    # ── Sidebar: logo + archivo ───────────────────────────────────────────────
+    """Función principal que renderiza toda la app."""
+    
+    # --- PASO 1: SIDEBAR ---
+    # Mostrar logo en el sidebar
     mostrar_logo()
+    
+    # Widget de carga de archivo (devuelve ruta si hay archivo activo)
     archivo_activo = widget_carga_archivo()
-
-    # Procesar si el archivo cambió
+    
+    # --- PASO 2: PROCESAR ARCHIVO SI CAMBIÓ ---
+    # Si hay archivo pero no está procesado aún, procesarlo
     if archivo_activo and st.session_state.df_raw is None:
         _cargar_y_procesar(archivo_activo)
-
-    # Sin datos → pantalla de bienvenida
+    
+    # --- PASO 3: PANTALLA DE BIENVENIDA (SI SIN DATOS) ---
+    # Si no hay datos, mostrar mensaje instructivo
     if st.session_state.df_procesado is None:
         _pantalla_bienvenida()
-        return
-
-    df_proc     = st.session_state.df_procesado
-    cols_dev    = st.session_state.cols_devengado
-
-    # ── Sidebar: filtros + resumen programación ───────────────────────────────
+        return  # Salir sin mostrar el resto
+    
+    # --- PASO 4: EXTRAER DATOS DE SESSION_STATE ---
+    # Si llegamos aquí, hay datos procesados
+    df_proc = st.session_state.df_procesado
+    cols_dev = st.session_state.cols_devengado
+    
+    # --- PASO 5: SIDEBAR - FILTROS ---
     st.sidebar.markdown("---")
-    df_filtrado = crear_filtros(df_proc)
-    mostrar_resumen_sidebar()
-
-    if df_filtrado is None or df_filtrado.empty:
-        st.warning("⚠️ Sin datos para los filtros actuales.")
-        return
-
-    # ── Inicializar programación ANTES de los tabs ───────────────────────────
-    # Garantiza que obtener_programacion_df() nunca devuelva None en Tab3,
-    # sin importar qué pestaña se haya visitado primero.
+    df_filtrado = crear_filtros(df_proc)  # Aplica filtros y devuelve DF filtrado
+    
+    # --- PASO 6: INICIALIZAR PROGRAMACIÓN ---
+    # Necesario antes de los tabs para que Tab3 tenga datos
     genericas_ord = sorted(df_filtrado["generica"].unique().tolist())
     inicializar_programacion(genericas_ord)
-
-    # ── Header + KPIs ─────────────────────────────────────────────────────────
+    mostrar_resumen_sidebar()
+    
+    # --- VERIFICACIÓN: HAY DATOS CON FILTROS APLICADOS? ---
+    if df_filtrado.empty:
+        st.warning("⚠️ Sin datos para los filtros actuales.")
+        return
+    
+    # --- PASO 7: HEADER Y KPIs ---
     _render_header(df_proc)
     pim, cert, comp, dev = _render_kpis(df_filtrado)
-
-    # ── Tabs principales ──────────────────────────────────────────────────────
+    
+    # --- PASO 8: TABS PRINCIPALES ---
+    # Crear 4 tabs
     tab1, tab2, tab3, tab4 = st.tabs([
         "📈 Indicadores",
         "📊 Por Genérica",
         "📆 Evolución Mensual",
         "📅 Programación",
     ])
-
-    # ── Tab 1: Gauges ─────────────────────────────────────────────────────────
+    
+    # TAB 1: Gauges (indicadores visuales)
     with tab1:
         mostrar_indicadores(pim, cert, comp, dev)
-
-    # ── Tab 2: Tabla resumen + drill-down ─────────────────────────────────────
+    
+    # TAB 2: Tabla de resumen por genérica
     with tab2:
         crear_tabla_resumen(df_filtrado)
-
-    # ── Tab 3: Gráfico mensual ─────────────────────────────────────────────
-    # obtener_programacion_df() siempre devuelve datos porque ya se inicializó
+    
+    # TAB 3: Gráfico mensual
     with tab3:
-        df_prog = obtener_programacion_df()
-        crear_grafico_mensual(df_filtrado, cols_dev, df_prog)
-
-    # ── Tab 4: Programación editable ──────────────────────────────────────────
+        crear_grafico_mensual(df_filtrado, cols_dev, obtener_programacion_df())
+    
+    # TAB 4: Formulario de programación editable
     with tab4:
         mostrar_formulario_programacion(genericas_ord)
 
 
+# ═══════════════════════════════════════════════════════════════════════════════
+# PUNTO DE ENTRADA
+# ═══════════════════════════════════════════════════════════════════════════════
+# Cuando ejecutas: streamlit run src/app.py
+# Python ejecuta el código de arriba a abajo, y al final llama a main()
+
 if __name__ == "__main__":
     main()
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# FIN DE APP.PY
+# ═══════════════════════════════════════════════════════════════════════════════
