@@ -1,3 +1,2 @@
 # Package marker
-# src/__init__.py
-Crear estructura src
+# This file makes the directory a Python package
