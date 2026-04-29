@@ -198,7 +198,8 @@ def mostrar_formulario_programacion(genericas_ordenadas: list[str]):
         total_row.index     = ["TOTAL"]
         df_show             = pd.concat([df_show, total_row])
         df_show["TOTAL AÑO"] = df_show[MESES].sum(axis=1)
-        df_fmt              = df_show.applymap(lambda x: fmt(x))
+        # CORRECCIÓN: Usar map() en lugar de applymap() (pandas >= 2.1)
+        df_fmt              = df_show.map(lambda x: fmt(x))
         st.dataframe(df_fmt, use_container_width=True)
         st.download_button("📥 Descargar CSV", df_show.to_csv().encode("utf-8"),
                            "programacion_mensual.csv", "text/csv")
