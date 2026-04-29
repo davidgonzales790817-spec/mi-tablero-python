@@ -92,28 +92,24 @@ _init_state()
 # FUNCIÓN: CARGAR Y PROCESAR EXCEL
 # ═══════════════════════════════════════════════════════════════════════════════
 
-def _cargar_y_procesar(ruta: str):
+def _cargar_y_procesar():
     """
-    Lee un Excel y ejecuta el pipeline de procesamiento.
-    
-    PARÁMETROS:
-        ruta (str): Ruta al archivo Excel (ej: "Respaldo_Data/reportes/archivo.xls")
+    Procesa el DataFrame que ya está en session_state.
     
     PASOS:
-        1. Leer archivo Excel a DataFrame
+        1. Obtener df_raw de session_state
         2. Crear DataProcessor y ejecutar pipeline
         3. Guardar resultados en session_state
     
     NOTA:
-        Si algo falla, se muestra error pero no se detiene la app completamente.
+        En Streamlit Cloud, el archivo ya está en memoria (cargado por widget_carga_archivo).
+        No necesitamos leerlo de disco.
     """
-    # Importar cargar_excel desde file_handler
-    from utils.file_handler import cargar_excel
-    
-    # Paso 1: Leer el Excel
-    df_raw = cargar_excel(ruta)
-    if df_raw is None:  # Si hubo error al leer
-        return  # Salir sin procesar
+    # Paso 1: Obtener el DataFrame que ya cargó widget_carga_archivo()
+    df_raw = st.session_state.get("df_raw")
+    if df_raw is None:
+        st.error("❌ No hay datos cargados.")
+        return
     
     # Paso 2: Crear el procesador y ejecutar pipeline
     procesador = DataProcessor(df_raw)
@@ -129,7 +125,6 @@ def _cargar_y_procesar(ruta: str):
         return
     
     # Guardar en session_state para las próximas recargas
-    st.session_state.df_raw = df_raw
     st.session_state.df_procesado = df_proc
     st.session_state.cols_devengado = cols_dev
 
@@ -149,8 +144,7 @@ def _pantalla_bienvenida():
             Formatos soportados: <code>.xls</code> y <code>.xlsx</code>
           </p>
           <p style="color:#94a3b8; font-size:13px; margin-top:24px;">
-            Los archivos se guardan automáticamente en <code>Respaldo_Data/reportes/</code>
-            y estarán disponibles para futuras sesiones.
+            Los archivos se procesan en memoria y estarán disponibles durante tu sesión.
           </p>
         </div>
         """,
@@ -266,8 +260,8 @@ def main():
     
     # --- PASO 2: PROCESAR ARCHIVO SI CAMBIÓ ---
     # Si hay archivo pero no está procesado aún, procesarlo
-    if archivo_activo and st.session_state.df_raw is None:
-        _cargar_y_procesar(archivo_activo)
+    if st.session_state.df_raw is not None and st.session_state.df_procesado is None:
+        _cargar_y_procesar()
     
     # --- PASO 3: PANTALLA DE BIENVENIDA (SI SIN DATOS) ---
     # Si no hay datos, mostrar mensaje instructivo
