@@ -1,6 +1,6 @@
 # src/utils/file_handler.py
 # ─────────────────────────────────────────────────────────────────────────────
-# Gestión de archivos Excel SIAF — Versión optimizada para Streamlit Cloud
+# Gestión de archivos Excel SIAF — Versión CORREGIDA para Streamlit Cloud
 # ─────────────────────────────────────────────────────────────────────────────
 #
 # CAMBIOS PARA STREAMLIT CLOUD:
@@ -68,18 +68,11 @@ def widget_carga_archivo() -> str | None:
     IMPORTANTE: En Streamlit Cloud, los archivos NO se guardan en disco.
     Se procesan directamente en memoria usando session_state.
     
-    FLUJO:
-    1. Usuario sube Excel
-    2. Se lee inmediatamente a DataFrame
-    3. Se almacena en session_state (memoria RAM)
-    4. Se procesa y se muestran gráficos
-    5. Al recargar la página, se pierden datos (normal para Fase 0)
+    CORRECCIÓN CRÍTICA: Se eliminó st.rerun() porque causaba que se pierda
+    el DataFrame en session_state. Streamlit automáticamente renderiza de nuevo.
     """
     st.sidebar.header("📁 Archivo de Datos")
 
-    # En Streamlit Cloud, no listamos archivos del repo (no persisten)
-    # Solo mostramos la opción de subir un nuevo archivo
-    
     archivo = st.sidebar.file_uploader(
         "Seleccionar Excel (.xls / .xlsx)",
         type=["xls", "xlsx"],
@@ -104,7 +97,9 @@ def widget_carga_archivo() -> str | None:
             
             # Mostrar mensaje de éxito
             st.sidebar.success(f"✅ Cargado: `{archivo.name}`")
-            st.rerun()
+            
+            # NO HACER st.rerun() AQUÍ - rompe session_state
+            # Streamlit automáticamente re-renderiza después de cambiar session_state
             
         except Exception as e:
             st.sidebar.error(f"❌ Error al leer el archivo:\n{str(e)}")
