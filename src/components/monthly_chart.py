@@ -5,6 +5,7 @@
 # ─────────────────────────────────────────────────────────────────────────────
 
 import pandas as pd
+import numpy as np
 import streamlit as st
 import plotly.graph_objects as go
 from config import MESES, COLORES_GENERICAS
@@ -18,8 +19,24 @@ def _determinar_escala(max_val: float) -> tuple[float, str]:
     return 1, "Soles"
 
 
-def _fmt_soles(valor: float) -> str:
-    return f"S/ {round(valor):,}".replace(",", ".")
+def _fmt_soles(valor) -> str:
+    """
+    Formatea un valor numérico como soles peruanos.
+    Maneja NaN, None, y valores inválidos.
+    """
+    # Manejar valores nulos o inválidos
+    if valor is None or (isinstance(valor, float) and np.isnan(valor)):
+        return "—"
+    
+    try:
+        # Convertir a número si es string
+        if isinstance(valor, str):
+            valor = float(valor.replace(",", "."))
+        
+        # Formatear
+        return f"S/ {round(valor):,}".replace(",", ".")
+    except (ValueError, TypeError):
+        return "—"
 
 
 def preparar_datos_grafico(
@@ -51,137 +68,94 @@ def preparar_datos_grafico(
                 fila[gen] = 0
             filas.append(fila)
 
-    df_graf = pd.DataFrame(filas)
-    df_graf["mes"] = pd.Categorical(df_graf["mes"], categories=MESES, ordered=True)
-    df_graf = df_graf.sort_values("mes").reset_index(drop=True)
-
-    return df_graf, genericas
+    df = pd.DataFrame(filas)
+    df["mes"] = pd.Categorical(df["mes"], categories=MESES, ordered=True)
+    df = df.sort_values("mes")
+    return df.set_index("mes"), genericas
 
 
 def crear_grafico_mensual(
     df_filtrado: pd.DataFrame,
     columnas_devengado: list[str],
-    df_programacion: pd.DataFrame | None = None,
+    programacion_df: pd.DataFrame,
 ):
     """
-    Renderiza el gráfico de barras apiladas (devengado mensual por genérica)
-    con una línea discontinua que muestra el monto programado total del mes.
+    Renderiza:
+    1. Gráfico de barras apiladas (devengado mensual por genérica)
+    2. Línea superpuesta (programación mensual total)
+    3. Tabla con valores formateados
+    4. Botón de descarga CSV
     """
-    st.subheader("📈 Evolución del Devengado Mensual por Genérica")
+    st.markdown('<div class="section-title">Evolución Mensual del Devengado</div>', 
+                unsafe_allow_html=True)
 
-    df_graf, genericas = preparar_datos_grafico(df_filtrado, columnas_devengado)
-
-    if df_graf.empty:
-        st.warning("Sin datos para el gráfico mensual.")
+    if df_filtrado.empty:
+        st.warning("Sin datos para mostrar.")
         return
 
-    # Escala
-    max_val = df_graf[genericas].sum(axis=1).max() if genericas else 0
-    factor, unidad = _determinar_escala(max_val)
+    # Preparar datos
+    pivot, genericas = preparar_datos_grafico(df_filtrado, columnas_devengado)
 
-    fig = go.Figure()
-    colores = COLORES_GENERICAS
-
-    # Barras por genérica
-    for i, gen in enumerate(genericas):
-        vals = df_graf[gen]
-        fig.add_trace(go.Bar(
-            name=gen,
-            x=df_graf["mes"],
-            y=vals / factor,
-            customdata=vals,
-            text=vals.apply(lambda x: _fmt_soles(x) if x > 0 else ""),
-            textposition="inside",
-            textfont=dict(size=9, color="white"),
-            marker_color=colores[i % len(colores)],
-            hovertemplate=(
-                "<b>%{x}</b><br>"
-                f"{gen}<br>"
-                "S/ %{customdata:,.0f}<extra></extra>"
-            ),
-        ))
-
-    # Línea de programación total
-    # Filtramos el df_programacion a las mismas genéricas del df_filtrado
-    # para que la línea respete los filtros laterales
-    if df_programacion is not None:
-        gens_activas = [g for g in genericas if g in df_programacion.index]
-        df_prog_filtrado = df_programacion.loc[gens_activas] if gens_activas else df_programacion
-        prog_vals = []
+    # Total programado por mes (si existe)
+    prog_mensual = {}
+    if programacion_df is not None and not programacion_df.empty:
         for mes in MESES:
-            if mes in df_prog_filtrado.columns:
-                prog_vals.append(df_prog_filtrado[mes].sum())
-            else:
-                prog_vals.append(0)
-
-        fig.add_trace(go.Scatter(
-            name="Programado",
-            x=MESES,
-            y=[v / factor for v in prog_vals],
-            customdata=prog_vals,
-            mode="lines+markers",
-            line=dict(color="#1e3a5f", width=2.5, dash="dash"),
-            marker=dict(size=6, color="#1e3a5f"),
-            hovertemplate=(
-                "<b>%{x}</b><br>"
-                "Programado: S/ %{customdata:,.0f}<extra></extra>"
-            ),
-        ))
-
-    # Anotaciones de totales ejecutados
-    totales = df_graf[genericas].sum(axis=1) if genericas else pd.Series([0] * len(df_graf))
-    for mes, total in zip(df_graf["mes"], totales):
-        if total > 0:
-            fig.add_annotation(
-                x=mes, y=total / factor,
-                text=f"<b>{_fmt_soles(total)}</b>",
-                showarrow=False, yshift=14,
-                font=dict(size=10, color="#1e293b"),
-                bgcolor="rgba(255,255,255,0.88)",
-                bordercolor="#94a3b8", borderwidth=1, borderpad=3,
+            prog_row = programacion_df[programacion_df.index == mes]
+            prog_mensual[mes] = (
+                prog_row.sum(axis=1).values[0]
+                if not prog_row.empty else 0
             )
 
+    # Crear figura
+    fig = go.Figure()
+
+    # Barras apiladas por genérica
+    for i, gen in enumerate(genericas):
+        color = COLORES_GENERICAS[i % len(COLORES_GENERICAS)]
+        fig.add_trace(go.Bar(
+            x=pivot.index,
+            y=pivot[gen],
+            name=gen,
+            marker=dict(color=color),
+            hovertemplate=f"<b>{gen}</b><br>%{{x}}<br>S/ %{{y:,.0f}}<extra></extra>",
+        ))
+
+    # Línea de programación (si existe)
+    if prog_mensual:
+        prog_vals = [prog_mensual.get(mes, 0) for mes in pivot.index]
+        fig.add_trace(go.Scatter(
+            x=pivot.index,
+            y=prog_vals,
+            mode="lines+markers",
+            name="Programación",
+            line=dict(color="#E74C3C", width=3, dash="dash"),
+            marker=dict(size=8),
+            hovertemplate="<b>Programación</b><br>%{x}<br>S/ %{y:,.0f}<extra></extra>",
+        ))
+
+    # Actualizar layout
     fig.update_layout(
+        title="Devengado Mensual por Genérica",
+        xaxis_title="Mes",
+        yaxis_title="Monto (S/.)",
         barmode="stack",
-        xaxis=dict(
-            tickangle=30,
-            tickmode="array",
-            tickvals=MESES,
-            ticktext=MESES,
-            tickfont=dict(size=11),
-            gridcolor="#e5e7eb",
-        ),
-        yaxis=dict(title=unidad, gridcolor="#e5e7eb", tickfont=dict(size=11)),
-        legend=dict(
-            orientation="h", yanchor="bottom", y=1.02,
-            xanchor="right", x=1, font=dict(size=11),
-        ),
         hovermode="x unified",
-        height=440,
-        margin=dict(l=10, r=10, t=65, b=55),
+        height=500,
+        legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1),
+        plot_bgcolor="white",
         paper_bgcolor="rgba(0,0,0,0)",
-        plot_bgcolor="rgba(0,0,0,0)",
+        xaxis=dict(gridcolor="#ececec"),
+        yaxis=dict(gridcolor="#ececec"),
+        margin=dict(t=80, b=30, l=10, r=10),
     )
 
-    st.plotly_chart(fig, use_container_width=True)
+    st.plotly_chart(fig, use_container_width=True, key="bar_mensual")
 
-    # Tabla pivotada expandible
-    with st.expander("📋 Ver datos mensuales detallados"):
-        pivot = df_graf.set_index("mes")[genericas].copy()
-        pivot.index = pd.CategoricalIndex(pivot.index, categories=MESES, ordered=True)
-        pivot = pivot.sort_index()
+    # Tabla con valores formateados
+    st.markdown('<div class="section-title">Tabla de Valores</div>', 
+                unsafe_allow_html=True)
 
-        # Fila TOTAL EJECUTADO
-        pivot.loc["TOTAL EJECUTADO"] = pivot.sum()
-
-        # Fila PROGRAMADO
-        if df_programacion is not None:
-            prog_row = {mes: (df_programacion[mes].sum() if mes in df_programacion.columns else 0)
-                        for mes in MESES}
-            prog_df  = pd.DataFrame([prog_row], index=["PROGRAMADO"])
-            prog_df.columns = pd.CategoricalIndex(prog_df.columns, categories=MESES, ordered=True)
-            pivot = pd.concat([pivot, prog_df])
-
+    with st.expander("Ver tabla detallada", expanded=False):
         pivot_fmt = pivot.copy()
         for col in pivot_fmt.columns:
             pivot_fmt[col] = pivot_fmt[col].apply(_fmt_soles)
