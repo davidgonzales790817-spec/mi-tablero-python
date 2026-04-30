@@ -76,7 +76,7 @@ def preparar_programacion_para_grafico(programacion_df, meses):
     return resultado
 
 def crear_grafico_mensual(df_filtrado, columnas_devengado, programacion_df=None):
-    """Crea el gráfico mensual."""
+    """Crea el gráfico mensual con configuración para móviles."""
     
     # Intentar obtener programación de session_state si no se pasó
     if programacion_df is None or programacion_df.empty:
@@ -99,7 +99,7 @@ def crear_grafico_mensual(df_filtrado, columnas_devengado, programacion_df=None)
     max_val = max(totales_mensuales.max(), total_programado, total_devengado / 6)
     escala, unidad = _determinar_escala(max_val)
     
-    # Crear figura
+    # Crear figura con configuración para móviles
     fig = go.Figure()
     
     # Agregar barras por genérica
@@ -153,7 +153,7 @@ def crear_grafico_mensual(df_filtrado, columnas_devengado, programacion_df=None)
                 borderpad=3
             )
     
-    # Configurar layout
+    # Configurar layout - MEJORADO PARA MÓVILES
     cumplimiento = (total_devengado / total_programado * 100) if total_programado > 0 else 0
     
     fig.update_layout(
@@ -163,28 +163,54 @@ def crear_grafico_mensual(df_filtrado, columnas_devengado, programacion_df=None)
                  f"Total Programado: {_fmt_soles(total_programado)} | "
                  f"Cumplimiento: {cumplimiento:.1f}%</sub>",
             x=0.5,
-            font=dict(size=14)
+            font=dict(size=13)
         ),
         xaxis_title="Mes",
         yaxis_title=unidad,
         barmode="stack",
         hovermode="x unified",
-        height=550,
+        height=500,  # Altura fija
+        # ⭐ LEYENDA DEBAJO DEL GRÁFICO (no sobrepone título)
         legend=dict(
             orientation="h",
-            yanchor="bottom",
-            y=1.02,
-            xanchor="right",
-            x=1,
-            bgcolor="rgba(255,255,255,0.9)"
+            yanchor="top",
+            y=-0.15,  # Posición debajo del gráfico
+            xanchor="center",
+            x=0.5,
+            bgcolor="rgba(255,255,255,0.95)",
+            bordercolor="#ddd",
+            borderwidth=1,
+            font=dict(size=10)
         ),
         plot_bgcolor="white",
-        xaxis=dict(gridcolor="#ececec", tickangle=45),
+        xaxis=dict(
+            gridcolor="#ececec", 
+            tickangle=45,
+            tickfont=dict(size=10)
+        ),
         yaxis=dict(gridcolor="#ececec"),
-        margin=dict(t=100, b=80)
+        margin=dict(t=100, b=100, l=50, r=30),  # Márgenes ajustados
+        # ⭐ CONFIGURACIÓN PARA MÓVILES - DESACTIVA GESTOS TÁCTILES
+        dragmode=False,  # Desactiva arrastre
+        selectdirection="h",  # Limita selección
+        newshape=dict(drawdirection="ortho")
     )
     
-    st.plotly_chart(fig, use_container_width=True)
+    # ⭐ CONFIGURACIÓN PARA QUE EL GRÁFICO SEA ESTÁTICO
+    config = {
+        "displayModeBar": False,  # Oculta barra de herramientas (opcional)
+        "staticPlot": False,  # Mantiene interactividad básica (hover)
+        "scrollZoom": False,  # Desactiva zoom con scroll
+        "doubleClick": False,  # Desactiva doble clic
+        "showTips": False,  # Oculta tips
+        "responsive": True,  # Mantiene responsividad básica
+        # Desactiva gestos táctiles
+        "modeBarButtonsToRemove": ["zoom", "pan", "select", "lasso", "zoomIn", "zoomOut", "autoScale", "resetScale"],
+        "displaylogo": False
+    }
+    
+    # Mostrar gráfico
+    st.plotly_chart(fig, use_container_width=True, config=config)
     
     # Mostrar métricas
     st.markdown("### 📊 Resumen")
