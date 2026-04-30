@@ -56,8 +56,39 @@ from components.programacion_form import (
 st.set_page_config(**PAGE_CONFIG)
 
 # Inyectar CSS personalizado para mejorar el look and feel
-st.markdown(CSS_EXTRA, unsafe_allow_html=True)
-
+st.markdown("""
+<style>
+    /* Mejoras para móviles */
+    @media (max-width: 768px) {
+        /* Reduce tamaño de texto en gráficos */
+        .js-plotly-plot .plotly .main-svg text {
+            font-size: 10px !important;
+        }
+        
+        /* Ajusta contenedores */
+        .stPlotlyChart {
+            overflow-x: auto;
+        }
+        
+        /* Mejora tabs en móvil */
+        .stTabs [data-baseweb="tab-list"] {
+            gap: 8px;
+            flex-wrap: wrap;
+        }
+        
+        /* Reduce padding en métricas */
+        .stMetric {
+            padding: 5px;
+        }
+    }
+    
+    /* Contenedor del gráfico sin scroll horizontal no deseado */
+    .stPlotlyChart {
+        width: 100%;
+        overflow-x: visible;
+    }
+</style>
+""", unsafe_allow_html=True)
 # ═══════════════════════════════════════════════════════════════════════════════
 # INICIALIZACIÓN DEL ESTADO (SESSION_STATE)
 # ═══════════════════════════════════════════════════════════════════════════════
