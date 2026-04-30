@@ -9,7 +9,7 @@ import pandas as pd
 import numpy as np
 import streamlit as st
 import plotly.graph_objects as go
-from typing import Optional, Tuple
+from typing import Optional, Tuple, Dict
 from functools import lru_cache
 from config import MESES, COLORES_GENERICAS
 
@@ -91,29 +91,27 @@ def _validar_dataframes(
         logger.error(f"Columnas faltantes en devengado. Esperadas: {columnas_devengado}")
         return False
     
-    if programacion_df is not None and programacion_df.empty:
-        logger.warning("DataFrame de programación vacío, será ignorado")
-        return True
+    if programacion_df is not None and not programacion_df.empty:
+        logger.info(f"Programación cargada: {len(programacion_df)} filas")
     
     logger.info(f"Validación exitosa: {len(df_filtrado)} filas")
     return True
 
 
-@lru_cache(maxsize=128)
-def _calcular_totales_mes(datos_tuple: tuple) -> dict:
+def obtener_programacion_desde_session() -> Optional[pd.DataFrame]:
     """
-    Calcula totales por mes (versión caché).
-    Convierte la tupla de vuelta a valores para procesamiento.
+    Obtiene el DataFrame de programación desde session_state.
     
-    Args:
-        datos_tuple: Tupla de datos (para permitir caché)
-        
     Returns:
-        Diccionario con totales por mes
+        DataFrame de programación o None si no existe
     """
-    # En uso real, esta función recibe datos procesados
-    # La caché previene recálculos en reordenamientos de UI
-    return {}
+    if "programacion_mensual" in st.session_state:
+        df_prog = st.session_state.programacion_mensual
+        if not df_prog.empty:
+            logger.info("Programación obtenida desde session_state")
+            return df_prog
+    logger.info("No hay programación guardada en session_state")
+    return None
 
 
 def preparar_datos_grafico(
@@ -164,32 +162,70 @@ def preparar_datos_grafico(
     return df.set_index("mes"), genericas
 
 
+def preparar_programacion_para_grafico(
+    programacion_df: pd.DataFrame,
+    meses: list,
+) -> Dict[str, float]:
+    """
+    Prepara los datos de programación para el gráfico.
+    Convierte el DataFrame de programación (genéricas x meses) a total mensual.
+    
+    Args:
+        programacion_df: DataFrame con programación por genérica y mes
+        meses: Lista de meses en orden
+        
+    Returns:
+        Diccionario {mes: total_programado}
+    """
+    if programacion_df is None or programacion_df.empty:
+        return {mes: 0 for mes in meses}
+    
+    # Sumar todas las genéricas para obtener total mensual
+    total_por_mes = {}
+    
+    for mes in meses:
+        if mes in programacion_df.columns:
+            total = programacion_df[mes].sum()
+            total_por_mes[mes] = total if not np.isnan(total) else 0
+        else:
+            total_por_mes[mes] = 0
+    
+    logger.info(f"Programación preparada: {total_por_mes}")
+    return total_por_mes
+
+
 def _construir_barras_apiladas(
     fig: go.Figure,
     pivot: pd.DataFrame,
     genericas: list[str],
+    escala: float,
 ) -> None:
     """
-    Añade las barras apiladas al gráfico.
+    Añade las barras apiladas al gráfico con etiquetas de montos.
     
     Args:
         fig: Figura de Plotly
         pivot: DataFrame pivotado
         genericas: Lista de genéricas a visualizar
+        escala: Factor de escala para el eje Y
     """
     for i, gen in enumerate(genericas):
         color = COLORES_GENERICAS[i % len(COLORES_GENERICAS)]
         
         fig.add_trace(go.Bar(
             x=pivot.index,
-            y=pivot[gen],
+            y=pivot[gen] / escala,
             name=gen,
             marker=dict(color=color),
+            text=pivot[gen].apply(lambda x: _fmt_soles(x)),
+            textposition="inside",
+            textfont=dict(size=9),
             hovertemplate=(
                 f"<b>{gen}</b><br>"
                 "%{x}<br>"
-                "S/ %{y:,.0f}<extra></extra>"
+                "S/ %{customdata:,.0f}<extra></extra>"
             ),
+            customdata=pivot[gen],
             legendgroup="devengado",
             showlegend=True,
         ))
@@ -198,7 +234,8 @@ def _construir_barras_apiladas(
 def _construir_linea_programacion(
     fig: go.Figure,
     pivot: pd.DataFrame,
-    programacion_df: pd.DataFrame,
+    programacion_por_mes: Dict[str, float],
+    escala: float,
 ) -> None:
     """
     Añade la línea de programación al gráfico (MEJORADA).
@@ -207,63 +244,87 @@ def _construir_linea_programacion(
     Args:
         fig: Figura de Plotly
         pivot: DataFrame pivotado
-        programacion_df: DataFrame de programación
+        programacion_por_mes: Diccionario con programación por mes
+        escala: Factor de escala para el eje Y
     """
-    if programacion_df is None or programacion_df.empty:
-        logger.warning("No hay datos de programación para mostrar")
+    if not any(programacion_por_mes.values()):
+        logger.info("No hay datos de programación para mostrar")
         return
     
-    prog_mensual = {}
-    for mes in pivot.index:
-        prog_row = programacion_df[programacion_df.index == mes]
-        if not prog_row.empty:
-            prog_mensual[mes] = prog_row.sum(axis=1).values[0]
-        else:
-            prog_mensual[mes] = 0
-    
-    # Validar que existan valores de programación
-    if not any(prog_mensual.values()):
-        logger.warning("Todos los valores de programación son 0")
-        return
-    
-    prog_vals = [prog_mensual.get(mes, 0) for mes in pivot.index]
+    prog_vals = [programacion_por_mes.get(mes, 0) / escala for mes in pivot.index]
     
     fig.add_trace(go.Scatter(
         x=pivot.index,
         y=prog_vals,
-        mode="lines+markers",
-        name="Programación Mensual",
+        mode="lines+markers+text",
+        name="🎯 Programación Mensual",
         line=dict(
-            color="#0F6E56",        # Verde oscuro (mejor contraste)
-            width=3,                # Ancho aumentado (2 -> 3)
-            dash="solid"            # Línea sólida, no punteada (mejor visibilidad)
+            color="#E63946",        # Rojo intenso (mejor contraste)
+            width=3,
+            dash="solid"
         ),
         marker=dict(
-            size=8,
-            color="#0F6E56",
-            symbol="circle"
+            size=10,
+            color="#E63946",
+            symbol="circle-dot",
+            line=dict(width=1, color="white")
         ),
+        text=[_fmt_soles(programacion_por_mes.get(mes, 0)) for mes in pivot.index],
+        textposition="top center",
+        textfont=dict(size=10, color="#E63946", family="Arial Black"),
         hovertemplate=(
-            "<b>Programación</b><br>"
+            "<b>📊 Programación</b><br>"
             "%{x}<br>"
-            "S/ %{y:,.0f}<extra></extra>"
+            "S/ %{customdata:,.0f}<extra></extra>"
         ),
-        yaxis="y2",  # Eje Y secundario
+        customdata=[programacion_por_mes.get(mes, 0) for mes in pivot.index],
+        name="Programación",
         legendgroup="programacion",
         showlegend=True,
     ))
 
 
+def _agregar_anotaciones_totales(
+    fig: go.Figure,
+    pivot: pd.DataFrame,
+    escala: float,
+) -> None:
+    """
+    Agrega anotaciones con el total mensual encima de cada barra.
+    
+    Args:
+        fig: Figura de Plotly
+        pivot: DataFrame pivotado
+        escala: Factor de escala
+    """
+    totales_mensuales = pivot.sum(axis=1)
+    
+    for i, (mes, total) in enumerate(totales_mensuales.items()):
+        if total > 0:
+            fig.add_annotation(
+                x=mes,
+                y=(total / escala) + (max(totales_mensuales) / escala * 0.02),
+                text=f"<b>💰 {_fmt_soles(total)}</b>",
+                showarrow=False,
+                font=dict(size=11, color="#2C3E50", family="Arial Black"),
+                bgcolor="rgba(255,255,255,0.9)",
+                bordercolor="#2C3E50",
+                borderwidth=1,
+                borderpad=4,
+                yshift=5
+            )
+
+
 def _calcular_estadisticas(
     pivot: pd.DataFrame,
-    programacion_df: Optional[pd.DataFrame] = None,
+    programacion_por_mes: Optional[Dict[str, float]] = None,
 ) -> dict:
     """
     Calcula estadísticas sobre el devengado vs programación.
     
     Args:
         pivot: DataFrame de devengado
-        programacion_df: DataFrame de programación
+        programacion_por_mes: Diccionario con programación por mes
         
     Returns:
         Diccionario con estadísticas
@@ -276,12 +337,17 @@ def _calcular_estadisticas(
         "valor_max": pivot.sum(axis=1).max() if len(pivot) > 0 else 0,
     }
     
-    if programacion_df is not None and not programacion_df.empty:
-        total_programado = programacion_df.sum().sum()
+    if programacion_por_mes and any(programacion_por_mes.values()):
+        total_programado = sum(programacion_por_mes.values())
         stats["total_programado"] = total_programado
         stats["cumplimiento_pct"] = (total_devengado / total_programado * 100) if total_programado > 0 else 0
+        stats["brecha"] = total_devengado - total_programado
+    else:
+        stats["total_programado"] = 0
+        stats["cumplimiento_pct"] = 0
+        stats["brecha"] = 0
     
-    logger.info(f"Estadísticas calculadas: {stats}")
+    logger.info(f"Estadísticas calculadas: total_devengado={total_devengado:,.0f}")
     return stats
 
 
@@ -303,127 +369,143 @@ def crear_grafico_mensual(
         columnas_devengado: Columnas de devengado por mes
         programacion_df: DataFrame de programación (opcional)
     """
+    # Si no se pasó programacion_df, intentar obtener de session_state
+    if programacion_df is None or programacion_df.empty:
+        programacion_df = obtener_programacion_desde_session()
+    
     # Validar datos
     if not _validar_dataframes(df_filtrado, columnas_devengado, programacion_df):
         st.error("Datos insuficientes para mostrar el gráfico")
         return
     
-    st.markdown(
-        '<div class="section-title">Evolución Mensual del Devengado</div>',
-        unsafe_allow_html=True
-    )
+    st.markdown("### 📈 Evolución Mensual del Devengado por Genérica")
     
     if df_filtrado.empty:
         st.warning("Sin datos para mostrar.")
         return
 
-    # Preparar datos
+    # Preparar datos de devengado
     pivot, genericas = preparar_datos_grafico(df_filtrado, columnas_devengado)
-    stats = _calcular_estadisticas(pivot, programacion_df)
+    
+    # Preparar datos de programación
+    programacion_por_mes = preparar_programacion_para_grafico(programacion_df, pivot.index.tolist())
+    
+    # Calcular estadísticas
+    stats = _calcular_estadisticas(pivot, programacion_por_mes)
+    
+    # Determinar escala y rango
+    max_val = max(
+        pivot.sum(axis=1).max(),
+        max(programacion_por_mes.values()) if programacion_por_mes else 0,
+        stats["total_devengado"] / 6
+    )
+    escala, etiqueta_escala = _determinar_escala(max_val)
     
     # Crear figura
     fig = go.Figure()
 
     # Añadir barras apiladas
-    _construir_barras_apiladas(fig, pivot, genericas)
+    _construir_barras_apiladas(fig, pivot, genericas, escala)
     
-    # Añadir línea de programación (MEJORADA)
-    _construir_linea_programacion(fig, pivot, programacion_df)
-
-    # Determinar rango del eje Y
-    max_val = max(
-        pivot.sum(axis=1).max(),
-        programacion_df.sum().sum() if programacion_df is not None else 0
-    )
-    escala, etiqueta_escala = _determinar_escala(max_val)
+    # Añadir línea de programación
+    if any(programacion_por_mes.values()):
+        _construir_linea_programacion(fig, pivot, programacion_por_mes, escala)
+    
+    # Añadir anotaciones de totales mensuales
+    _agregar_anotaciones_totales(fig, pivot, escala)
 
     # Actualizar layout
     fig.update_layout(
         title={
-            "text": f"Devengado Mensual por Genérica<br><sub>Total: {_fmt_soles(stats['total_devengado'])}</sub>",
+            "text": f"<b>Devengado vs Programación</b><br>"
+                    f"<sub>Total Devengado: {_fmt_soles(stats['total_devengado'])} | "
+                    f"Total Programado: {_fmt_soles(stats['total_programado'])} | "
+                    f"Cumplimiento: {stats['cumplimiento_pct']:.1f}%</sub>",
             "x": 0.5,
             "xanchor": "center",
             "font": {"size": 14}
         },
         xaxis_title="Mes",
-        yaxis_title="Monto (S/.)",
-        yaxis2=dict(
-            title="Programación (S/.)",
-            overlaying="y",
-            side="right",
-            color="#0F6E56",
-            titlefont=dict(color="#0F6E56"),
-            tickfont=dict(color="#0F6E56"),
-        ),
+        yaxis_title=etiqueta_escala,
         barmode="stack",
         hovermode="x unified",
-        height=520,
+        height=550,
         legend=dict(
             orientation="h",
             yanchor="bottom",
-            y=1.05,
+            y=1.02,
             xanchor="right",
             x=1,
-            bgcolor="rgba(255,255,255,0.8)",
+            bgcolor="rgba(255,255,255,0.9)",
             bordercolor="#ddd",
             borderwidth=1,
         ),
         plot_bgcolor="white",
         paper_bgcolor="rgba(0,0,0,0)",
-        xaxis=dict(gridcolor="#ececec", showgrid=True),
+        xaxis=dict(
+            gridcolor="#ececec", 
+            showgrid=True,
+            tickangle=45,
+            tickfont=dict(size=11)
+        ),
         yaxis=dict(gridcolor="#ececec", showgrid=True),
-        margin=dict(t=100, b=50, l=60, r=60),
+        margin=dict(t=120, b=80, l=60, r=60),
     )
 
     st.plotly_chart(fig, use_container_width=True, key="bar_mensual_v2")
 
-    # Mostrar estadísticas
-    col1, col2, col3, col4 = st.columns(4)
+    # Mostrar métricas clave
+    st.markdown("### 📊 Resumen de Ejecución")
+    col1, col2, col3, col4, col5 = st.columns(5)
     with col1:
         st.metric("Total Devengado", _fmt_soles(stats["total_devengado"]))
     with col2:
-        st.metric("Promedio Mensual", _fmt_soles(stats["promedio_mensual"]))
+        st.metric("Total Programado", _fmt_soles(stats["total_programado"]))
     with col3:
-        st.metric("Mes Máximo", stats["mes_max"] if stats["mes_max"] else "—")
+        color = "normal" if stats["cumplimiento_pct"] >= 100 else "inverse"
+        st.metric("Cumplimiento", f"{stats['cumplimiento_pct']:.1f}%", delta_color=color)
     with col4:
-        if "cumplimiento_pct" in stats:
-            st.metric("Cumplimiento", f"{stats['cumplimiento_pct']:.1f}%")
-        else:
-            st.metric("Cumplimiento", "Sin datos")
+        st.metric("Promedio Mensual", _fmt_soles(stats["promedio_mensual"]))
+    with col5:
+        brecha_color = "normal" if stats["brecha"] >= 0 else "inverse"
+        st.metric("Brecha", _fmt_soles(stats["brecha"]), delta_color=brecha_color)
 
     # Tabla con valores formateados
-    st.markdown(
-        '<div class="section-title">Tabla de Valores Detallada</div>',
-        unsafe_allow_html=True
-    )
-
-    with st.expander("Ver tabla detallada", expanded=False):
-        pivot_fmt = pivot.copy()
+    with st.expander("📋 Ver tabla detallada de valores", expanded=False):
+        # Crear tabla con datos de devengado
+        devengado_total_mensual = pivot.sum(axis=1)
         
-        # Formatear números
-        for col in pivot_fmt.columns:
-            pivot_fmt[col] = pivot_fmt[col].apply(_fmt_soles)
+        tabla = pd.DataFrame({
+            "Mes": pivot.index,
+            "Devengado Total": devengado_total_mensual.apply(_fmt_soles),
+            "Programación": [programacion_por_mes.get(mes, 0) for mes in pivot.index],
+            "Diferencia": [(devengado_total_mensual[i] - programacion_por_mes.get(mes, 0)) 
+                          for i, mes in enumerate(pivot.index)]
+        })
         
-        # Añadir fila de totales
-        totales = pivot.sum(axis=0)
-        totales_fmt = totales.apply(_fmt_soles)
-        pivot_fmt.loc["TOTAL"] = totales_fmt
+        tabla["Programación"] = tabla["Programación"].apply(_fmt_soles)
+        tabla["Diferencia"] = tabla["Diferencia"].apply(_fmt_soles)
         
-        st.dataframe(pivot_fmt, use_container_width=True)
-
+        st.dataframe(tabla, use_container_width=True, hide_index=True)
+        
         # Botón de descarga
-        csv = pivot.to_csv().encode("utf-8")
+        csv_data = pivot.copy()
+        csv_data["TOTAL_MENSUAL"] = devengado_total_mensual
+        csv_data["PROGRAMACION"] = [programacion_por_mes.get(mes, 0) for mes in pivot.index]
+        
+        csv = csv_data.to_csv().encode("utf-8")
         st.download_button(
-            "📥 Descargar CSV",
+            "📥 Descargar datos completos (CSV)",
             csv,
-            "evolucion_mensual.csv",
+            "evolucion_mensual_detallada.csv",
             "text/csv",
-            help="Descarga los datos sin formato para análisis adicional"
+            help="Descarga los datos de devengado y programación"
         )
         
         # Información de generación
         st.caption(
-            f"Datos procesados: {len(pivot)} meses | "
-            f"Categorías: {len(genericas)} | "
-            f"Total registros: {len(df_filtrado)}"
+            f"📅 Datos procesados: {len(pivot)} meses | "
+            f"📁 Categorías: {len(genericas)} | "
+            f"📊 Registros analizados: {len(df_filtrado)} | "
+            f"🎯 Programación: {'Sí' if any(programacion_por_mes.values()) else 'No'}"
         )
