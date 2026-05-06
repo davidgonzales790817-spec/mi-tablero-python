@@ -135,8 +135,9 @@ def kpi_card(
         </div>
         """
 
+    color_muted = PALETA["text_muted"]
     subtitulo_html = (
-        f"<div style='font-size: 11px; color: {PALETA[\"text_muted\"]}; margin-top: 4px;'>{subtitulo}</div>"
+        f"<div style='font-size: 11px; color: {color_muted}; margin-top: 4px;'>{subtitulo}</div>"
         if subtitulo else ""
     )
 
