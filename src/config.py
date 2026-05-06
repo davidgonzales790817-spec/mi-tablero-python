@@ -1,265 +1,168 @@
-# ═══════════════════════════════════════════════════════════════════════════════
-# src/config.py — CONFIGURACIÓN CENTRALIZADA
-# ═══════════════════════════════════════════════════════════════════════════════
-#
-# PROPÓSITO: Un único lugar para TODAS las constantes de la app
-# Si necesitas cambiar un color, número o texto, lo cambias aquí una sola vez
-# y automáticamente se actualiza en toda la aplicación.
-#
-# ═══════════════════════════════════════════════════════════════════════════════
+# src/config.py
+# ─────────────────────────────────────────────────────────────────────────────
+# Configuración global del Tablero Presupuestal SIAF — versión 2.0
+# Paleta "Treasury Vault" basada en tendencias dashboards 2026
+# ─────────────────────────────────────────────────────────────────────────────
 
-# Importar Plotly Express para acceder a paletas de colores predefinidas
-import plotly.express as px
+# ═══════════════════════════════════════════════════════════════════════════
+# PALETA TREASURY VAULT
+# Inspirada en investigación 2026: Recursion (tinted neutrals), media.io
+# (Vault Green), Phoenix Strategy (financial dashboards). Cada color tiene
+# un rol semántico — no se usa para diferenciación visual arbitraria.
+# ═══════════════════════════════════════════════════════════════════════════
 
-# ═══════════════════════════════════════════════════════════════════════════════
-# SECCIÓN 1: CONFIGURACIÓN DE STREAMLIT
-# ═══════════════════════════════════════════════════════════════════════════════
-# Estos parámetros controlan cómo se ve la página en el navegador
+PALETA = {
+    # Neutrales tintados zinc (no gris puro #808080)
+    # Usar para: bases, texto, ejes, grids, bordes
+    "bg_primary":      "#FAFAFA",  # fondo principal modo claro
+    "bg_secondary":    "#F4F4F5",  # superficies (cards, panels)
+    "bg_tertiary":     "#E4E4E7",  # bordes suaves, separadores
+    "bg_dark_primary": "#09090B",  # fondo principal modo oscuro
+    "bg_dark_secondary": "#18181B", # superficies oscuras
+    "bg_dark_tertiary":  "#27272A", # bordes oscuros
 
-PAGE_CONFIG = {
-    # Texto que aparece en la pestaña del navegador
-    "page_title": "Tablero Presupuestal SIAF",
-    
-    # Emoji que aparece junto al título en la pestaña
-    "page_icon": "📊",
-    
-    # Layout: "wide" = ocupar todo el ancho, "centered" = centrado con márgenes
-    "layout": "wide",
-    
-    # Estado inicial del sidebar: "expanded" = abierto, "collapsed" = cerrado
-    "initial_sidebar_state": "expanded",
+    "text_primary":   "#18181B",  # texto principal modo claro
+    "text_secondary": "#52525B",  # texto secundario
+    "text_muted":     "#71717A",  # texto terciario, hints
+    "text_dark_primary":   "#FAFAFA",  # texto principal modo oscuro
+    "text_dark_secondary": "#A1A1AA",  # texto secundario modo oscuro
+
+    # Treasury green — color de marca (usar con moderación)
+    # Usar para: KPI principal, programación, ejecución acumulada, líneas meta
+    "brand":      "#1D9E75",
+    "brand_dark": "#0F6E56",
+    "brand_light": "#5DCAA5",
+    "brand_50":   "#E1F5EE",   # backgrounds suaves para badges
+
+    # Trust blue — información, drill-down, certificado
+    "info":       "#185FA5",
+    "info_dark":  "#0C447C",
+    "info_light": "#85B7EB",
+    "info_50":    "#E6F1FB",
+
+    # Caution amber — atención, riesgo moderado, ejecución 30%-70%
+    "warning":      "#BA7517",
+    "warning_dark": "#854F0B",
+    "warning_50":   "#FAEEDA",
+
+    # Critical red — subejecución, anomalías, alertas urgentes
+    "danger":      "#A32D2D",
+    "danger_dark": "#791F1F",
+    "danger_50":   "#FCEBEB",
+
+    # Coral accent — comparativos vs año anterior, marcadores temporales
+    "accent":     "#D85A30",
+    "accent_dark": "#993C1D",
 }
 
-# ═══════════════════════════════════════════════════════════════════════════════
-# SECCIÓN 2: RUTAS DE ARCHIVOS
-# ═══════════════════════════════════════════════════════════════════════════════
+# ═══════════════════════════════════════════════════════════════════════════
+# COLORES POR GENÉRICA (rampa única teal — no rainbow)
+# Todas las genéricas usan stops del mismo color para no saturar visualmente
+# ═══════════════════════════════════════════════════════════════════════════
 
-# Carpeta donde se guardarán los archivos Excel que suban los usuarios
-# Relativa a donde ejecutas: streamlit run src/app.py
-CARPETA_DATA = "Respaldo_Data"
+COLORES_GENERICAS = [
+    "#04342C",  # 1. Personal — más oscuro (mayor presupuesto típicamente)
+    "#085041",  # 2. Pensiones
+    "#0F6E56",  # 3. Bienes y servicios
+    "#1D9E75",  # 4. Donaciones
+    "#5DCAA5",  # 5. Otros gastos
+    "#9FE1CB",  # 6. Adquisición activos
+]
 
-# URL del logo de IPEN (se muestra en el sidebar)
-LOGO_URL = "https://www.ipen.gob.pe/templates/ipen/images/logo-ipen.png"
+# Mapping específico por código de genérica para consistencia
+COLOR_POR_GENERICA = {
+    "1.PERSONAL Y OBLIGACIONES SOCIALES": "#04342C",
+    "2.PENSIONES Y OTRAS PRESTACIONES SOCIALES": "#085041",
+    "3.BIENES Y SERVICIOS": "#0F6E56",
+    "4.DONACIONES Y TRANSFERENCIAS": "#1D9E75",
+    "5.OTROS GASTOS": "#5DCAA5",
+    "6.ADQUISICION DE ACTIVOS NO FINANCIEROS": "#9FE1CB",
+}
 
-# ═══════════════════════════════════════════════════════════════════════════════
-# SECCIÓN 3: CALENDARIO
-# ═══════════════════════════════════════════════════════════════════════════════
-# Lista de los 12 meses en español, en orden
+# ═══════════════════════════════════════════════════════════════════════════
+# UMBRALES DE EJECUCIÓN (basados en directiva DGPP-MEF)
+# Las "tres zonas" oficiales del MEF para clasificación de avance financiero
+# ═══════════════════════════════════════════════════════════════════════════
+
+UMBRALES_EJECUCION = {
+    "bajo":     {"min": 0,    "max": 31.7, "color": "#A32D2D", "label": "Bajo"},
+    "moderado": {"min": 31.7, "max": 45.2, "color": "#BA7517", "label": "Moderado"},
+    "alto":     {"min": 45.2, "max": 100,  "color": "#1D9E75", "label": "Alto"},
+}
+
+def color_por_avance(pct: float) -> str:
+    """Retorna el color semántico según el % de avance."""
+    if pct < UMBRALES_EJECUCION["bajo"]["max"]:
+        return UMBRALES_EJECUCION["bajo"]["color"]
+    if pct < UMBRALES_EJECUCION["moderado"]["max"]:
+        return UMBRALES_EJECUCION["moderado"]["color"]
+    return UMBRALES_EJECUCION["alto"]["color"]
+
+# ═══════════════════════════════════════════════════════════════════════════
+# CONSTANTES TEMPORALES
+# ═══════════════════════════════════════════════════════════════════════════
 
 MESES = [
-    "Enero",
-    "Febrero",
-    "Marzo",
-    "Abril",
-    "Mayo",
-    "Junio",
-    "Julio",
-    "Agosto",
-    "Setiembre",
-    "Octubre",
-    "Noviembre",
-    "Diciembre",
+    "Enero", "Febrero", "Marzo", "Abril", "Mayo", "Junio",
+    "Julio", "Agosto", "Setiembre", "Octubre", "Noviembre", "Diciembre"
 ]
 
-# ═══════════════════════════════════════════════════════════════════════════════
-# SECCIÓN 4: COLORES PARA GRÁFICOS
-# ═══════════════════════════════════════════════════════════════════════════════
+MESES_ABREV = ["Ene", "Feb", "Mar", "Abr", "May", "Jun",
+               "Jul", "Ago", "Set", "Oct", "Nov", "Dic"]
 
-# Paleta de colores para gráficos de barras apiladas (6 colores bonitos)
-# Set2 es una paleta de Plotly que se ve bien
-COLORES_GENERICAS = px.colors.qualitative.Set2
+# ═══════════════════════════════════════════════════════════════════════════
+# CONFIGURACIÓN DE GRÁFICOS PLOTLY (modo claro y oscuro)
+# ═══════════════════════════════════════════════════════════════════════════
 
-# Colores específicos para los indicadores (gauges)
-COLORES_GAUGE = {
-    "certificado": "#1f77b4",  # Azul oscuro
-    "compromiso": "#ff7f0e",   # Naranja
-    "devengado": "#2ca02c",    # Verde
+PLOTLY_THEME_LIGHT = {
+    "layout": {
+        "font": {"family": "Inter, system-ui, sans-serif", "size": 12, "color": "#52525B"},
+        "paper_bgcolor": "rgba(0,0,0,0)",
+        "plot_bgcolor": "#FAFAFA",
+        "xaxis": {"gridcolor": "#E4E4E7", "linecolor": "#E4E4E7", "zerolinecolor": "#E4E4E7"},
+        "yaxis": {"gridcolor": "#E4E4E7", "linecolor": "#E4E4E7", "zerolinecolor": "#E4E4E7"},
+        "colorway": COLORES_GENERICAS,
+        "hoverlabel": {"bgcolor": "#18181B", "font": {"color": "#FAFAFA", "size": 12}},
+    }
 }
 
-# ═══════════════════════════════════════════════════════════════════════════════
-# SECCIÓN 5: PATRONES REGEX PARA DETECTAR COLUMNAS SIAF
-# ═══════════════════════════════════════════════════════════════════════════════
-#
-# El problema: cada institución exporta el Excel con nombres de columna diferentes
-# - IPEN usa: "mto_devenga_01", "mto_devenga_02", etc.
-# - Otra institución puede usar: "devengado_01", "mes_01", etc.
-#
-# Solución: Usar expresiones regulares (regex) para encontrar columnas por patrón
-# En lugar de buscar el nombre exacto, buscamos un patrón.
-
-PATRONES_DEVENGADO = [
-    r"mto_devenga_\d{2}",      # Ejemplo: "mto_devenga_01" (dos dígitos)
-    r"devengado",              # Simplemente contiene la palabra "devengado"
-    r"monto_devengado",        # O "monto_devengado"
-    r"mes_\d{2}",              # O "mes_01", "mes_02", etc.
-]
-
-# Palabras que EXCLUYEN una columna de ser identificada como devengado
-# Porque si dice "mto_pim" no la queremos confundir con devengado
-PATRONES_EXCLUIR = [
-    "mto_pim",
-    "pim",
-    "mto_certificado",
-    "certificado",
-    "mto_compro_anual",
-    "compromiso",
-    "total",
-    "año",
-    "ano",
-]
-
-# ═══════════════════════════════════════════════════════════════════════════════
-# SECCIÓN 6: CSS PERSONALIZADO
-# ═══════════════════════════════════════════════════════════════════════════════
-# HTML + CSS que se inyecta en la página para personalizar estilos
-
-CSS_EXTRA = """
-<style>
-/* Barra lateral: ancho mínimo de 260 pixels */
-[data-testid="stSidebar"] { min-width: 260px !important; }
-
-/* Contenedor principal: agregar espacio arriba */
-.block-container { padding-top: 1rem !important; }
-
-/* Tarjetas de métrica (los KPI boxes con números grandes) */
-div[data-testid="metric-container"] {
-    background: #f8fafc;
-    border: 1px solid #e2e8f0;
-    border-radius: 10px;
-    padding: 12px 16px;
+PLOTLY_THEME_DARK = {
+    "layout": {
+        "font": {"family": "Inter, system-ui, sans-serif", "size": 12, "color": "#A1A1AA"},
+        "paper_bgcolor": "rgba(0,0,0,0)",
+        "plot_bgcolor": "#18181B",
+        "xaxis": {"gridcolor": "#27272A", "linecolor": "#27272A", "zerolinecolor": "#27272A"},
+        "yaxis": {"gridcolor": "#27272A", "linecolor": "#27272A", "zerolinecolor": "#27272A"},
+        "colorway": COLORES_GENERICAS,
+        "hoverlabel": {"bgcolor": "#FAFAFA", "font": {"color": "#18181B", "size": 12}},
+    }
 }
 
-/* Título del header */
-.header-title {
-    font-size: clamp(16px, 2.5vw, 24px);
-    font-weight: 700;
-    color: #1e3a5f;
+# ═══════════════════════════════════════════════════════════════════════════
+# PATRONES DE COLUMNAS SIAF (regex para detección automática)
+# ═══════════════════════════════════════════════════════════════════════════
+
+PATRONES_COLUMNAS = {
+    "pia":         [r"mto_pia", r"pia$", r"presupuesto_inicial_apertura"],
+    "pim":         [r"mto_pim", r"pim$", r"presupuesto_inicial_modificado"],
+    "certificado": [r"mto_certificado", r"certificado", r"certif"],
+    "compromiso":  [r"mto_compro_anual", r"compromiso", r"compro_anual"],
+    "devengado":   [r"mto_devenga_\d{2}", r"devengado_\d{2}", r"deveng_\d{2}"],
+    "girado":      [r"mto_girado", r"girado"],
+    "pagado":      [r"mto_pagado", r"pagado"],
+    "generica":    [r"^generica$", r"genérica", r"clasif_generica"],
+    "fuente":      [r"fuente_financ", r"ff_concat", r"ff$"],
+    "ue":          [r"unidad_ejecutora", r"^ue$", r"sec_ejec"],
+    "clasificador":[r"clasificador", r"especifica"],
 }
 
-/* Subtítulo del header */
-.header-sub {
-    font-size: clamp(11px, 1.5vw, 14px);
-    color: #64748b;
+# ═══════════════════════════════════════════════════════════════════════════
+# CONFIGURACIÓN INSTITUCIONAL (overrideable via .env)
+# ═══════════════════════════════════════════════════════════════════════════
+
+INSTITUCION = {
+    "nombre": "IPEN",
+    "nombre_completo": "Instituto Peruano de Energía Nuclear",
+    "logo_url": "https://www.ipen.gob.pe/templates/ipen/images/logo-ipen.png",
+    "ejercicio_fiscal": 2026,
 }
-
-/* En celulares */
-@media (max-width: 768px) {
-    .block-container { padding: 0.5rem !important; }
-    div[data-testid="metric-container"] { padding: 8px 10px; }
-}
-</style>
-"""
-
-# ═══════════════════════════════════════════════════════════════════════════════
-# SECCIÓN 7: PROGRAMACIÓN PRECARGADA (DATOS DE IPEN 2026)
-# ═══════════════════════════════════════════════════════════════════════════════
-#
-# EXPLICACIÓN:
-# Este es un diccionario (dict) con la programación presupuestal de IPEN para 2026
-#
-# ESTRUCTURA:
-#   - Nivel 1: Clave = Genérica de gasto (ej: "1.PERSONAL Y OBLIGACIONES SOCIALES")
-#   - Nivel 2: Clave = Mes en español (ej: "Enero", "Febrero")
-#   - Valor: Monto en soles programado para ese mes-genérica
-#
-# EJEMPLO DE LECTURA:
-#   PROGRAMACION_PRECARGADA["1.PERSONAL Y OBLIGACIONES SOCIALES"]["Enero"]
-#   = 1_580_315 soles
-#
-# USO EN LA APP:
-#   Cuando el usuario carga el archivo Excel, la app permite editar la programación
-#   Si el usuario quiere "restaurar valores oficiales", estos datos se usan.
-#
-# NOTA: Los números tienen guiones bajos (_) para legibilidad
-#   1_580_315 es lo mismo que 1580315, pero más fácil de leer
-
-PROGRAMACION_PRECARGADA = {
-    "1.PERSONAL Y OBLIGACIONES SOCIALES": {
-        "Enero": 1_580_315,
-        "Febrero": 1_513_999,
-        "Marzo": 1_758_827,
-        "Abril": 2_511_367,
-        "Mayo": 1_777_661,
-        "Junio": 1_769_061,
-        "Julio": 3_283_142,
-        "Agosto": 1_752_061,
-        "Setiembre": 1_752_061,
-        "Octubre": 2_511_367,
-        "Noviembre": 1_752_061,
-        "Diciembre": 4_433_250,
-    },
-    "2.PENSIONES Y OTRAS PRESTACIONES SOCIALES": {
-        "Enero": 120_258,
-        "Febrero": 103_476,
-        "Marzo": 102_467,
-        "Abril": 104_058,
-        "Mayo": 104_058,
-        "Junio": 104_058,
-        "Julio": 122_591,
-        "Agosto": 104_058,
-        "Setiembre": 104_058,
-        "Octubre": 104_058,
-        "Noviembre": 104_058,
-        "Diciembre": 168_358,
-    },
-    "3.BIENES Y SERVICIOS": {
-        "Enero": 254_138,
-        "Febrero": 944_140,
-        "Marzo": 1_405_023,
-        "Abril": 2_563_008,
-        "Mayo": 2_640_117,
-        "Junio": 2_631_808,
-        "Julio": 2_760_267,
-        "Agosto": 2_803_458,
-        "Setiembre": 2_804_461,
-        "Octubre": 2_792_513,
-        "Noviembre": 2_892_769,
-        "Diciembre": 3_637_567,
-    },
-    "4.DONACIONES Y TRANSFERENCIAS": {
-        "Enero": 0,
-        "Febrero": 400_000,
-        "Marzo": 0,
-        "Abril": 0,
-        "Mayo": 0,
-        "Junio": 0,
-        "Julio": 0,
-        "Agosto": 0,
-        "Setiembre": 86_914,
-        "Octubre": 0,
-        "Noviembre": 0,
-        "Diciembre": 0,
-    },
-    "5.OTROS GASTOS": {
-        "Enero": 0,
-        "Febrero": 67_398,
-        "Marzo": 1_432,
-        "Abril": 0,
-        "Mayo": 0,
-        "Junio": 0,
-        "Julio": 93_295,
-        "Agosto": 0,
-        "Setiembre": 0,
-        "Octubre": 0,
-        "Noviembre": 0,
-        "Diciembre": 0,
-    },
-    "6.ADQUISICION DE ACTIVOS NO FINANCIEROS": {
-        "Enero": 0,
-        "Febrero": 279_909,
-        "Marzo": 165_463,
-        "Abril": 482_713,
-        "Mayo": 5_982_148,
-        "Junio": 1_542_038,
-        "Julio": 1_381_225,
-        "Agosto": 1_600_025,
-        "Setiembre": 2_162_400,
-        "Octubre": 1_994_755,
-        "Noviembre": 1_634_224,
-        "Diciembre": 4_741_390,
-    },
-}
-
-# ═══════════════════════════════════════════════════════════════════════════════
-# FIN DE CONFIG.PY
-# ═══════════════════════════════════════════════════════════════════════════════
