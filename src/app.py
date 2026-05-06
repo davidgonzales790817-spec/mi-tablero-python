@@ -51,7 +51,7 @@ with st.sidebar:
                 cols = {
                     "pim": "PIM",
                     "certificado": "Certificado",
-                    "compromiso": "Compromiso",
+                    "compromiso": "Compromiso_Anual",
                     "generica": processor.col_generica,
                     "devengado": processor.columnas_devengado,
                 }
