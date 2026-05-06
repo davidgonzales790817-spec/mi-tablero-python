@@ -1,17 +1,17 @@
 # src/config.py
 # ═══════════════════════════════════════════════════════════════════════════
-# CONFIGURACIÓN GLOBAL - Tablero Presupuestal SIAF v2.0
-# Integración sin breaking changes con config existente
+# CONFIGURACIÓN GLOBAL - Tablero Presupuestal SIAF v2.0 COMPLETO
 # ═══════════════════════════════════════════════════════════════════════════
 
 import streamlit as st
 from datetime import datetime
+import os
 
-# ─ CONSTANTES EXISTENTES (mantener compatibilidad) ─────────────────────
-# Si tu config.py actual tiene otras constantes, NO las reemplaces
-# Solo agrega las nuevas que faltan
+# ═══════════════════════════════════════════════════════════════════════════
+# CONSTANTES BÁSICAS
+# ═══════════════════════════════════════════════════════════════════════════
 
-# Meses en español (probablemente ya lo tenías)
+# Meses en español
 MESES = [
     "Enero", "Febrero", "Marzo", "Abril", "Mayo", "Junio",
     "Julio", "Agosto", "Setiembre", "Octubre", "Noviembre", "Diciembre"
@@ -21,58 +21,79 @@ MESES_ABREV = ["Ene", "Feb", "Mar", "Abr", "May", "Jun",
                "Jul", "Ago", "Set", "Oct", "Nov", "Dic"]
 
 # ═══════════════════════════════════════════════════════════════════════════
-# NUEVA SECCIÓN: PALETA TREASURY VAULT (v2.0)
+# PATRONES PARA DETECTAR COLUMNAS (lo que necesita data_processor.py)
+# ═══════════════════════════════════════════════════════════════════════════
+
+# Patrones para detectar columnas de devengado mensual
+PATRONES_DEVENGADO = [
+    r"mto_devenga_\d{2}",  # mto_devenga_01, mto_devenga_02, etc.
+    r"devengado_\d{2}",    # devengado_01, devengado_02, etc.
+    r"devenga_\d{2}",      # devenga_01, etc.
+    r"dev_\d{2}",          # dev_01, etc.
+    r"devengo_\d{2}",      # devengo_01, etc.
+]
+
+# Patrones a excluir (columnas que no deben procesarse)
+PATRONES_EXCLUIR = [
+    r"^id$",
+    r"^index$",
+    r"^unnamed",
+    r"^index_",
+    r"notas$",
+    r"comentarios$",
+    r"observaciones$",
+    r"_total$",
+    r"_pct",
+]
+
+# ═══════════════════════════════════════════════════════════════════════════
+# PALETA TREASURY VAULT (v2.0)
 # ═══════════════════════════════════════════════════════════════════════════
 
 PALETA = {
-    # Neutrales tintados zinc (no gris puro)
-    "bg_primary":      "#FAFAFA",  # fondo principal modo claro
-    "bg_secondary":    "#F4F4F5",  # superficies (cards, panels)
-    "bg_tertiary":     "#E4E4E7",  # bordes suaves
-    "bg_dark_primary": "#09090B",  # fondo principal modo oscuro
+    # Neutrales tintados zinc
+    "bg_primary":      "#FAFAFA",
+    "bg_secondary":    "#F4F4F5",
+    "bg_tertiary":     "#E4E4E7",
+    "bg_dark_primary": "#09090B",
     "bg_dark_secondary": "#18181B",
     "bg_dark_tertiary":  "#27272A",
 
-    "text_primary":   "#18181B",   # texto principal claro
-    "text_secondary": "#52525B",   # texto secundario
-    "text_muted":     "#71717A",   # texto terciario
+    "text_primary":   "#18181B",
+    "text_secondary": "#52525B",
+    "text_muted":     "#71717A",
     "text_dark_primary":   "#FAFAFA",
     "text_dark_secondary": "#A1A1AA",
 
     # Colores semánticos
-    "brand":      "#1D9E75",  # Verde Treasury
+    "brand":      "#1D9E75",
     "brand_dark": "#0F6E56",
     "brand_light": "#5DCAA5",
     "brand_50":   "#E1F5EE",
 
-    "info":       "#185FA5",  # Azul confianza
+    "info":       "#185FA5",
     "info_dark":  "#0C447C",
     "info_light": "#85B7EB",
     "info_50":    "#E6F1FB",
 
-    "warning":      "#BA7517",  # Ámbar precaución
+    "warning":      "#BA7517",
     "warning_dark": "#854F0B",
     "warning_50":   "#FAEEDA",
 
-    "danger":      "#A32D2D",  # Rojo crítico
+    "danger":      "#A32D2D",
     "danger_dark": "#791F1F",
     "danger_50":   "#FCEBEB",
 
-    "accent":     "#D85A30",  # Coral para comparativos
+    "accent":     "#D85A30",
     "accent_dark": "#993C1D",
 }
 
 # ═══════════════════════════════════════════════════════════════════════════
-# COLORES POR GENÉRICA (rampa única teal)
+# COLORES POR GENÉRICA
 # ═══════════════════════════════════════════════════════════════════════════
 
 COLORES_GENERICAS = [
-    "#04342C",  # 1. Personal
-    "#085041",  # 2. Pensiones
-    "#0F6E56",  # 3. Bienes y servicios
-    "#1D9E75",  # 4. Donaciones
-    "#5DCAA5",  # 5. Otros gastos
-    "#9FE1CB",  # 6. Adquisición activos
+    "#04342C", "#085041", "#0F6E56", "#1D9E75", "#5DCAA5", "#9FE1CB",
 ]
 
 COLOR_POR_GENERICA = {
@@ -85,7 +106,7 @@ COLOR_POR_GENERICA = {
 }
 
 # ═══════════════════════════════════════════════════════════════════════════
-# UMBRALES DE EJECUCIÓN (DGPP-MEF)
+# UMBRALES DE EJECUCIÓN
 # ═══════════════════════════════════════════════════════════════════════════
 
 UMBRALES_EJECUCION = {
@@ -103,10 +124,8 @@ def color_por_avance(pct: float) -> str:
     return UMBRALES_EJECUCION["alto"]["color"]
 
 # ═══════════════════════════════════════════════════════════════════════════
-# PATRONES PARA DETECTAR COLUMNAS (v2.0)
+# PATRONES DE COLUMNAS (para detectar automáticamente)
 # ═══════════════════════════════════════════════════════════════════════════
-# Estos patrones se usan en data_processor.py para detectar automáticamente
-# las columnas del Excel, aunque tengan nombres ligeramente diferentes
 
 PATRONES_COLUMNAS = {
     "pia":         [r"mto_pia", r"pia$", r"presupuesto_inicial_apertura"],
@@ -123,9 +142,8 @@ PATRONES_COLUMNAS = {
 }
 
 # ═══════════════════════════════════════════════════════════════════════════
-# PROGRAMACIÓN PRECARGADA (si la tienes)
+# PROGRAMACIÓN PRECARGADA
 # ═══════════════════════════════════════════════════════════════════════════
-# Reemplaza esto con tus datos reales de IPEN 2026
 
 PROGRAMACION_PRECARGADA = {
     "1.PERSONAL Y OBLIGACIONES SOCIALES": {
@@ -215,7 +233,7 @@ PROGRAMACION_PRECARGADA = {
 }
 
 # ═══════════════════════════════════════════════════════════════════════════
-# CONFIGURACIÓN DE STREAMLIT
+# CONFIGURACIÓN INSTITUCIONAL
 # ═══════════════════════════════════════════════════════════════════════════
 
 INSTITUCION = {
@@ -228,8 +246,6 @@ INSTITUCION = {
 # ═══════════════════════════════════════════════════════════════════════════
 # RUTAS DE CARPETAS
 # ═══════════════════════════════════════════════════════════════════════════
-
-import os
 
 PROJECT_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 RESPALDO_DATA_DIR = os.path.join(PROJECT_ROOT, "Respaldo_Data")
