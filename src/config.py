@@ -1,17 +1,29 @@
 # src/config.py
 # ═══════════════════════════════════════════════════════════════════════════
-# CONFIGURACIÓN GLOBAL - Tablero Presupuestal SIAF v2.0 COMPLETO
+# CONFIGURACIÓN GLOBAL - DEFINITIVO COMPLETO
+# Incluye TODAS las constantes que cada módulo necesita
 # ═══════════════════════════════════════════════════════════════════════════
 
-import streamlit as st
-from datetime import datetime
 import os
+from datetime import datetime
 
 # ═══════════════════════════════════════════════════════════════════════════
-# CONSTANTES BÁSICAS
+# RUTAS Y CARPETAS (necesario para file_handler.py y programacion_form.py)
 # ═══════════════════════════════════════════════════════════════════════════
 
-# Meses en español
+PROJECT_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+CARPETA_DATA = os.path.join(PROJECT_ROOT, "Respaldo_Data")
+REPORTES_DIR = os.path.join(CARPETA_DATA, "reportes")
+PROG_JSON_PATH = os.path.join(CARPETA_DATA, "programacion.json")
+
+# Crear carpetas si no existen
+os.makedirs(CARPETA_DATA, exist_ok=True)
+os.makedirs(REPORTES_DIR, exist_ok=True)
+
+# ═══════════════════════════════════════════════════════════════════════════
+# MESES (necesario para data_processor.py, programacion_form.py, monthly_chart.py)
+# ═══════════════════════════════════════════════════════════════════════════
+
 MESES = [
     "Enero", "Febrero", "Marzo", "Abril", "Mayo", "Junio",
     "Julio", "Agosto", "Setiembre", "Octubre", "Noviembre", "Diciembre"
@@ -21,7 +33,7 @@ MESES_ABREV = ["Ene", "Feb", "Mar", "Abr", "May", "Jun",
                "Jul", "Ago", "Set", "Oct", "Nov", "Dic"]
 
 # ═══════════════════════════════════════════════════════════════════════════
-# PATRONES PARA DETECTAR COLUMNAS (lo que necesita data_processor.py)
+# PATRONES PARA DETECTAR COLUMNAS (necesario para data_processor.py)
 # ═══════════════════════════════════════════════════════════════════════════
 
 # Patrones para detectar columnas de devengado mensual
@@ -33,7 +45,7 @@ PATRONES_DEVENGADO = [
     r"devengo_\d{2}",      # devengo_01, etc.
 ]
 
-# Patrones a excluir (columnas que no deben procesarse)
+# Patrones a excluir
 PATRONES_EXCLUIR = [
     r"^id$",
     r"^index$",
@@ -47,53 +59,16 @@ PATRONES_EXCLUIR = [
 ]
 
 # ═══════════════════════════════════════════════════════════════════════════
-# PALETA TREASURY VAULT (v2.0)
-# ═══════════════════════════════════════════════════════════════════════════
-
-PALETA = {
-    # Neutrales tintados zinc
-    "bg_primary":      "#FAFAFA",
-    "bg_secondary":    "#F4F4F5",
-    "bg_tertiary":     "#E4E4E7",
-    "bg_dark_primary": "#09090B",
-    "bg_dark_secondary": "#18181B",
-    "bg_dark_tertiary":  "#27272A",
-
-    "text_primary":   "#18181B",
-    "text_secondary": "#52525B",
-    "text_muted":     "#71717A",
-    "text_dark_primary":   "#FAFAFA",
-    "text_dark_secondary": "#A1A1AA",
-
-    # Colores semánticos
-    "brand":      "#1D9E75",
-    "brand_dark": "#0F6E56",
-    "brand_light": "#5DCAA5",
-    "brand_50":   "#E1F5EE",
-
-    "info":       "#185FA5",
-    "info_dark":  "#0C447C",
-    "info_light": "#85B7EB",
-    "info_50":    "#E6F1FB",
-
-    "warning":      "#BA7517",
-    "warning_dark": "#854F0B",
-    "warning_50":   "#FAEEDA",
-
-    "danger":      "#A32D2D",
-    "danger_dark": "#791F1F",
-    "danger_50":   "#FCEBEB",
-
-    "accent":     "#D85A30",
-    "accent_dark": "#993C1D",
-}
-
-# ═══════════════════════════════════════════════════════════════════════════
-# COLORES POR GENÉRICA
+# COLORES POR GENÉRICA (necesario para monthly_chart.py)
 # ═══════════════════════════════════════════════════════════════════════════
 
 COLORES_GENERICAS = [
-    "#04342C", "#085041", "#0F6E56", "#1D9E75", "#5DCAA5", "#9FE1CB",
+    "#04342C",  # 1. Personal
+    "#085041",  # 2. Pensiones
+    "#0F6E56",  # 3. Bienes y servicios
+    "#1D9E75",  # 4. Donaciones
+    "#5DCAA5",  # 5. Otros gastos
+    "#9FE1CB",  # 6. Adquisición activos
 ]
 
 COLOR_POR_GENERICA = {
@@ -106,43 +81,13 @@ COLOR_POR_GENERICA = {
 }
 
 # ═══════════════════════════════════════════════════════════════════════════
-# UMBRALES DE EJECUCIÓN
+# LOGO (necesario para sidebar.py)
 # ═══════════════════════════════════════════════════════════════════════════
 
-UMBRALES_EJECUCION = {
-    "bajo":     {"min": 0,    "max": 31.7, "color": "#A32D2D", "label": "Bajo"},
-    "moderado": {"min": 31.7, "max": 45.2, "color": "#BA7517", "label": "Moderado"},
-    "alto":     {"min": 45.2, "max": 100,  "color": "#1D9E75", "label": "Alto"},
-}
-
-def color_por_avance(pct: float) -> str:
-    """Retorna el color semántico según el % de avance."""
-    if pct < UMBRALES_EJECUCION["bajo"]["max"]:
-        return UMBRALES_EJECUCION["bajo"]["color"]
-    if pct < UMBRALES_EJECUCION["moderado"]["max"]:
-        return UMBRALES_EJECUCION["moderado"]["color"]
-    return UMBRALES_EJECUCION["alto"]["color"]
+LOGO_URL = "https://www.ipen.gob.pe/templates/ipen/images/logo-ipen.png"
 
 # ═══════════════════════════════════════════════════════════════════════════
-# PATRONES DE COLUMNAS (para detectar automáticamente)
-# ═══════════════════════════════════════════════════════════════════════════
-
-PATRONES_COLUMNAS = {
-    "pia":         [r"mto_pia", r"pia$", r"presupuesto_inicial_apertura"],
-    "pim":         [r"mto_pim", r"pim$", r"presupuesto_inicial_modificado"],
-    "certificado": [r"mto_certificado", r"certificado", r"certif"],
-    "compromiso":  [r"mto_compro_anual", r"compromiso", r"compro_anual"],
-    "devengado":   [r"mto_devenga_\d{2}", r"devengado_\d{2}", r"deveng_\d{2}"],
-    "girado":      [r"mto_girado", r"girado"],
-    "pagado":      [r"mto_pagado", r"pagado"],
-    "generica":    [r"^generica$", r"genérica", r"clasif_generica"],
-    "fuente":      [r"fuente_financ", r"ff_concat", r"ff$"],
-    "ue":          [r"unidad_ejecutora", r"^ue$", r"sec_ejec"],
-    "clasificador":[r"clasificador", r"especifica"],
-}
-
-# ═══════════════════════════════════════════════════════════════════════════
-# PROGRAMACIÓN PRECARGADA
+# PROGRAMACIÓN PRECARGADA (necesario para programacion_form.py)
 # ═══════════════════════════════════════════════════════════════════════════
 
 PROGRAMACION_PRECARGADA = {
@@ -233,24 +178,86 @@ PROGRAMACION_PRECARGADA = {
 }
 
 # ═══════════════════════════════════════════════════════════════════════════
+# PALETA TREASURY VAULT (v2.0 - para app.py y kpi_cards.py)
+# ═══════════════════════════════════════════════════════════════════════════
+
+PALETA = {
+    "bg_primary":      "#FAFAFA",
+    "bg_secondary":    "#F4F4F5",
+    "bg_tertiary":     "#E4E4E7",
+    "bg_dark_primary": "#09090B",
+    "bg_dark_secondary": "#18181B",
+    "bg_dark_tertiary":  "#27272A",
+
+    "text_primary":   "#18181B",
+    "text_secondary": "#52525B",
+    "text_muted":     "#71717A",
+    "text_dark_primary":   "#FAFAFA",
+    "text_dark_secondary": "#A1A1AA",
+
+    "brand":      "#1D9E75",
+    "brand_dark": "#0F6E56",
+    "brand_light": "#5DCAA5",
+    "brand_50":   "#E1F5EE",
+
+    "info":       "#185FA5",
+    "info_dark":  "#0C447C",
+    "info_light": "#85B7EB",
+    "info_50":    "#E6F1FB",
+
+    "warning":      "#BA7517",
+    "warning_dark": "#854F0B",
+    "warning_50":   "#FAEEDA",
+
+    "danger":      "#A32D2D",
+    "danger_dark": "#791F1F",
+    "danger_50":   "#FCEBEB",
+
+    "accent":     "#D85A30",
+    "accent_dark": "#993C1D",
+}
+
+# ═══════════════════════════════════════════════════════════════════════════
+# UMBRALES DE EJECUCIÓN (para app.py)
+# ═══════════════════════════════════════════════════════════════════════════
+
+UMBRALES_EJECUCION = {
+    "bajo":     {"min": 0,    "max": 31.7, "color": "#A32D2D", "label": "Bajo"},
+    "moderado": {"min": 31.7, "max": 45.2, "color": "#BA7517", "label": "Moderado"},
+    "alto":     {"min": 45.2, "max": 100,  "color": "#1D9E75", "label": "Alto"},
+}
+
+def color_por_avance(pct: float) -> str:
+    """Retorna el color semántico según el % de avance."""
+    if pct < UMBRALES_EJECUCION["bajo"]["max"]:
+        return UMBRALES_EJECUCION["bajo"]["color"]
+    if pct < UMBRALES_EJECUCION["moderado"]["max"]:
+        return UMBRALES_EJECUCION["moderado"]["color"]
+    return UMBRALES_EJECUCION["alto"]["color"]
+
+# ═══════════════════════════════════════════════════════════════════════════
+# PATRONES DE COLUMNAS (para detectar automáticamente)
+# ═══════════════════════════════════════════════════════════════════════════
+
+PATRONES_COLUMNAS = {
+    "pia":         [r"mto_pia", r"pia$"],
+    "pim":         [r"mto_pim", r"pim$"],
+    "certificado": [r"mto_certificado", r"certificado"],
+    "compromiso":  [r"mto_compro_anual", r"compromiso"],
+    "devengado":   [r"mto_devenga_\d{2}", r"devengado_\d{2}"],
+    "girado":      [r"mto_girado", r"girado"],
+    "pagado":      [r"mto_pagado", r"pagado"],
+    "generica":    [r"^generica$", r"genérica"],
+    "fuente":      [r"fuente_financ", r"ff_concat"],
+    "ue":          [r"unidad_ejecutora", r"^ue$"],
+}
+
+# ═══════════════════════════════════════════════════════════════════════════
 # CONFIGURACIÓN INSTITUCIONAL
 # ═══════════════════════════════════════════════════════════════════════════
 
 INSTITUCION = {
     "nombre": "IPEN",
     "nombre_completo": "Instituto Peruano de Energía Nuclear",
-    "logo_url": "https://www.ipen.gob.pe/templates/ipen/images/logo-ipen.png",
     "ejercicio_fiscal": 2026,
 }
-
-# ═══════════════════════════════════════════════════════════════════════════
-# RUTAS DE CARPETAS
-# ═══════════════════════════════════════════════════════════════════════════
-
-PROJECT_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-RESPALDO_DATA_DIR = os.path.join(PROJECT_ROOT, "Respaldo_Data")
-REPORTES_DIR = os.path.join(RESPALDO_DATA_DIR, "reportes")
-PROG_JSON_PATH = os.path.join(RESPALDO_DATA_DIR, "programacion.json")
-
-# Crear carpetas si no existen
-os.makedirs(REPORTES_DIR, exist_ok=True)
