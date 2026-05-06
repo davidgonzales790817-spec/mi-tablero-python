@@ -7,7 +7,7 @@
 import streamlit as st
 import plotly.graph_objects as go
 from typing import Optional
-from src.config import PALETA, color_por_avance
+from config import PALETA, color_por_avance
 
 
 def _format_soles(valor: float, decimals: int = 1) -> str:
