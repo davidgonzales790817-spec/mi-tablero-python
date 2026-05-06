@@ -43,16 +43,18 @@ with st.sidebar:
                 engine = "xlrd" if archivo.name.lower().endswith(".xls") else "openpyxl"
                 df_raw = pd.read_excel(archivo, engine=engine)
 
-                # Usar procesar_completo() — el método real de DataProcessor
+                # Procesar con DataProcessor
                 processor = DataProcessor(df_raw)
                 processor.procesar_completo()
 
-                # Armar dict de columnas con los atributos reales
-                cols = {}
-                if processor.col_pim:          cols["pim"]          = processor.col_pim
-                if processor.col_certificado:  cols["certificado"]  = processor.col_certificado
-                if processor.col_compromiso:   cols["compromiso"]   = processor.col_compromiso
-                if processor.col_generica:     cols["generica"]     = processor.col_generica
+                # Armar dict de columnas CON LAS CLAVES CORRECTAS que indicadores.py espera
+                cols = {
+                    "pim": processor.col_pim,
+                    "certificado": processor.col_certificado,
+                    "compromiso": processor.col_compromiso,
+                    "generica": processor.col_generica,
+                    "devengado": processor.columnas_devengado,
+                }
 
                 st.session_state.df             = processor.obtener_dataframe()
                 st.session_state.df_procesado   = processor.obtener_dataframe()
@@ -165,9 +167,9 @@ with t1:
     with col_gen:
         st.markdown("### 📊 Por genérica")
         try:
-            col_pim = cols.get("pim", "PIM")
-            col_generica = st.session_state.col_generica or "generica"
-            if col_generica in df.columns:
+            col_pim = cols.get("pim")
+            col_generica = st.session_state.col_generica
+            if col_pim and col_generica and col_generica in df.columns:
                 for gen in df[col_generica].dropna().unique()[:6]:
                     df_g  = df[df[col_generica] == gen]
                     pim_g = df_g[col_pim].sum() if col_pim in df_g.columns else 0
@@ -232,8 +234,8 @@ with t3:
     st.divider()
     st.markdown("### 📅 Programación mensual")
     try:
-        col_gen_key = st.session_state.col_generica or "generica"
-        if col_gen_key in df.columns:
+        col_gen_key = st.session_state.col_generica
+        if col_gen_key and col_gen_key in df.columns:
             gens = sorted(df[col_gen_key].dropna().unique().tolist())
             mostrar_formulario_programacion(gens)
     except Exception as e:
