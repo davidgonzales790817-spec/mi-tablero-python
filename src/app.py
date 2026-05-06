@@ -2,8 +2,6 @@
 # ═══════════════════════════════════════════════════════════════════════════
 # APLICACIÓN PRINCIPAL · Tablero Presupuestal SIAF v2.0
 # Instituto Peruano de Energía Nuclear (IPEN) · 2026
-# 
-# NOTA: Imports relativos optimizados para Streamlit Cloud
 # ═══════════════════════════════════════════════════════════════════════════
 
 import streamlit as st
@@ -11,48 +9,30 @@ import pandas as pd
 import plotly.graph_objects as go
 from datetime import date, datetime
 import sys
-from pathlib import Path
+import os
 
-# ─ Agregar raíz del proyecto al path ─────────────────────────────────────
-PROJECT_ROOT = Path(__file__).parent.parent
-sys.path.insert(0, str(PROJECT_ROOT))
+# Agregar el directorio src al path de Python
+current_dir = os.path.dirname(os.path.abspath(__file__))
+parent_dir = os.path.dirname(current_dir)
+if parent_dir not in sys.path:
+    sys.path.insert(0, parent_dir)
 
-# ─ Imports de tu app actual (existentes) ─────────────────────────────────
-try:
-    from src.utils.data_processor import DataProcessor
-    from src.utils.file_handler import FileHandler
-    from src.components.sidebar import mostrar_sidebar
-    from src.components.gauges import crear_gauges
-    from src.components.monthly_chart import monthly_chart
-    from src.components.summary_table import mostrar_tabla_resumen
-    from src.components.programacion_form import (
-        inicializar_programacion,
-        obtener_programacion_df,
-        mostrar_formulario_programacion,
-        mostrar_resumen_sidebar,
-    )
-except ImportError as e:
-    st.error(f"❌ Error importando módulos existentes: {e}")
-    st.info("Verifica que estos archivos existan en src/")
-    st.stop()
-
-# ─ NUEVOS imports (v2.0) ─────────────────────────────────────────────────
-try:
-    from src.config import PALETA, color_por_avance, MESES_ABREV
-    from src.utils.indicadores import calcular_todos_indicadores
-    from src.components.kpi_cards import grid_kpis, panel_alertas
-except ImportError as e:
-    st.error(f"❌ Error importando módulos v2.0: {e}")
-    st.info("Asegúrate de que estos archivos estén en sus carpetas:")
-    st.code("""
-src/
-  config.py
-  utils/
-    indicadores.py
-  components/
-    kpi_cards.py
-    """)
-    st.stop()
+# ─ Importar módulos locales ──────────────────────────────────────────────
+from utils.data_processor import DataProcessor
+from utils.file_handler import FileHandler
+from utils.indicadores import calcular_todos_indicadores
+from components.sidebar import mostrar_sidebar
+from components.gauges import crear_gauges
+from components.monthly_chart import monthly_chart
+from components.summary_table import mostrar_tabla_resumen
+from components.programacion_form import (
+    inicializar_programacion,
+    obtener_programacion_df,
+    mostrar_formulario_programacion,
+    mostrar_resumen_sidebar,
+)
+from components.kpi_cards import grid_kpis, panel_alertas
+from config import PALETA, color_por_avance, MESES_ABREV
 
 
 # ═══════════════════════════════════════════════════════════════════════════
@@ -187,26 +167,6 @@ def main():
     
     if st.session_state.df is None:
         st.info("👈 Carga un archivo Excel SIAF en el sidebar para comenzar")
-        
-        # Mostrar ejemplo de estructura esperada
-        with st.expander("📋 Ver estructura esperada del Excel"):
-            st.markdown("""
-            Tu archivo Excel debe tener al menos estas columnas:
-            
-            | Columna | Ejemplo | Obligatoria |
-            |---------|---------|------------|
-            | `mto_pim` | 142500000 | ✅ Sí |
-            | `mto_certificado` | 81900000 | ✅ Sí |
-            | `mto_compro_anual` | 66100000 | ✅ Sí |
-            | `mto_devenga_01` a `12` | 2400000 | ✅ Sí |
-            | `generica` | 3.BIENES Y SERVICIOS | ✅ Sí |
-            | `mto_girado` | 11400000 | ⭕ Opcional |
-            | `mto_pagado` | 10200000 | ⭕ Opcional |
-            
-            El sistema detecta las columnas automáticamente con regex.
-            Si tus columnas tienen nombres diferentes, edita `src/config.py`.
-            """)
-        
         return
     
     # Calcular indicadores v2.0 (los 47 indicadores derivables)
@@ -218,7 +178,6 @@ def main():
         )
     except Exception as e:
         st.error(f"Error calculando indicadores: {e}")
-        st.info("Verifica que el archivo Excel tenga las columnas correctas.")
         return
     
     ind = st.session_state.indicadores
@@ -231,7 +190,7 @@ def main():
     ])
     
     # ═════════════════════════════════════════════════════════════════════
-    # TAB 1: VISTA EJECUTIVA (4-6 KPIs, decisión de reasignación)
+    # TAB 1: VISTA EJECUTIVA
     # ═════════════════════════════════════════════════════════════════════
     
     with tab_ejecutivo:
@@ -239,7 +198,7 @@ def main():
         st.markdown(f"*Actualizado al {ind['fecha_corte']}*")
         st.divider()
         
-        # KPI CARDS principales (8 cards en grid responsivo)
+        # KPI CARDS principales
         st.markdown("### 📈 Indicadores principales")
         
         try:
@@ -257,8 +216,6 @@ def main():
                     "progreso": ind["ejecucion"]["pct_certificado"],
                     "target": 33,
                     "estado": color_por_avance(ind["ejecucion"]["pct_certificado"]),
-                    "delta": ind["ejecucion"]["pct_certificado"] - 30,
-                    "delta_label": "vs meta teórica",
                 },
                 {
                     "titulo": "Compromiso",
@@ -282,7 +239,6 @@ def main():
                     "valor": ind["ejecucion"]["saldo_certificable"],
                     "formato": "soles",
                     "subtitulo": "Aún por certificar",
-                    "estado": "info",
                 },
                 {
                     "titulo": "Pendiente de girar",
@@ -304,7 +260,7 @@ def main():
                     "valor": ind["proyecciones"]["multiplicador_aceleracion"],
                     "formato": "numero",
                     "estado": "danger" if ind["proyecciones"]["multiplicador_aceleracion"] > 2 else "warning",
-                    "subtitulo": f"{ind['proyecciones']['multiplicador_aceleracion']:.1f}× del ritmo actual",
+                    "subtitulo": f"{ind['proyecciones']['multiplicador_aceleracion']:.1f}× requerido",
                 },
             ], columnas=4)
         except Exception as e:
@@ -317,7 +273,7 @@ def main():
         try:
             panel_alertas(ind["alertas"])
         except Exception as e:
-            st.error(f"Error en panel de alertas: {e}")
+            st.warning(f"Error mostrando alertas: {e}")
         
         st.divider()
         
@@ -325,17 +281,15 @@ def main():
         col_curva, col_generica = st.columns([1.2, 1])
         
         with col_curva:
-            st.markdown("### 📉 Curva S · Devengado vs Programado")
+            st.markdown("### 📉 Curva S")
             
             try:
-                # Obtener devengado mensual real
                 meses_dev = []
                 acumulado = 0
                 for col in st.session_state.columnas.get("devengado", []):
                     acumulado += st.session_state.df[col].sum()
                     meses_dev.append(acumulado)
                 
-                # Obtener programación
                 df_prog = obtener_programacion_df()
                 if df_prog is not None:
                     meses_prog = []
@@ -347,7 +301,6 @@ def main():
                 else:
                     meses_prog = [0] * len(MESES_ABREV)
                 
-                # Crear gráfico de curva S
                 fig_curva = go.Figure()
                 
                 fig_curva.add_trace(go.Scatter(
@@ -355,7 +308,7 @@ def main():
                     name="Devengado real",
                     mode="lines+markers",
                     line=dict(color=PALETA["brand"], width=3),
-                    marker=dict(size=8, symbol="circle"),
+                    marker=dict(size=8),
                     fill="tozeroy",
                     fillcolor=f"{PALETA['brand']}30",
                 ))
@@ -365,7 +318,6 @@ def main():
                     name="Programado",
                     mode="lines",
                     line=dict(color=PALETA["info"], width=2),
-                    dash="solid",
                 ))
                 
                 fig_curva.update_layout(
@@ -373,16 +325,15 @@ def main():
                     template="plotly_white",
                     height=300,
                     margin=dict(l=0, r=0, t=30, b=0),
-                    font=dict(family="Inter, sans-serif", size=11),
                 )
                 
                 st.plotly_chart(fig_curva, use_container_width=True)
             
             except Exception as e:
-                st.warning(f"No se pudo renderizar curva S: {e}")
+                st.warning(f"Error en curva S: {e}")
         
         with col_generica:
-            st.markdown("### 📊 Avance por genérica")
+            st.markdown("### 📊 Por genérica")
             
             try:
                 if "generica" in st.session_state.columnas:
@@ -396,205 +347,119 @@ def main():
                     
                     gen_avance_sorted = sorted(gen_avance, key=lambda x: x["avance"], reverse=True)
                     
-                    for item in gen_avance_sorted:
+                    for item in gen_avance_sorted[:6]:  # Top 6
                         color = color_por_avance(item["avance"])
                         st.markdown(f"""
                         <div style="margin-bottom: 8px;">
-                            <div style="display: flex; justify-content: space-between; margin-bottom: 4px;">
-                                <span style="font-size: 11px; font-weight: 500;">{item['genérica'][:40]}</span>
-                                <span style="font-size: 11px; font-weight: 500;">{item['avance']:.1f}%</span>
+                            <div style="display: flex; justify-content: space-between; margin-bottom: 3px;">
+                                <span style="font-size: 11px;">{item['genérica'][:35]}</span>
+                                <span style="font-size: 11px; font-weight: 600;">{item['avance']:.1f}%</span>
                             </div>
-                            <div style="height: 6px; background: #e8e8e8; border-radius: 3px; position: relative;">
-                                <div style="position: absolute; height: 100%; width: {min(item['avance'], 100):.1f}%; background: {color}; border-radius: 3px;"></div>
-                                <div style="position: absolute; height: 100%; width: 1px; left: 33%; background: #999;"></div>
+                            <div style="height: 5px; background: #e8e8e8; border-radius: 2px; position: relative;">
+                                <div style="position: absolute; height: 100%; width: {min(item['avance'], 100):.1f}%; background: {color}; border-radius: 2px;"></div>
                             </div>
                         </div>
                         """, unsafe_allow_html=True)
             
             except Exception as e:
-                st.warning(f"No se pudo mostrar avance por genérica: {e}")
+                st.warning(f"Error: {e}")
     
     # ═════════════════════════════════════════════════════════════════════
-    # TAB 2: VISTA OPERACIONAL (drill-down, ratios, top clasificadores)
+    # TAB 2: VISTA OPERACIONAL
     # ═════════════════════════════════════════════════════════════════════
     
     with tab_operacional:
-        st.markdown("## Análisis operacional · Detalle por categoría")
+        st.markdown("## Análisis operacional")
         st.divider()
         
-        # Tabs interiores
         col1, col2, col3 = st.columns(3)
         
         with col1:
-            st.markdown("### 📈 Ratios de eficiencia")
-            
+            st.markdown("### 📈 Ratios")
             ratios = ind["eficiencia"]
-            st.metric(
-                "Ratio Compromiso/Certificado",
-                f"{ratios.get('ratio_compro_certif', 0):.1f}%",
-                help="% del certificado que se formaliza en compromiso"
-            )
-            st.metric(
-                "Ratio Devengado/Compromiso",
-                f"{ratios.get('ratio_deveng_compro', 0):.1f}%",
-                help="% del compromiso que se materializa"
-            )
-            st.metric(
-                "Velocidad diaria",
-                f"S/ {ratios.get('velocidad_diaria_soles', 0)/1e3:.1f}K",
-                help="Soles devengados por día"
-            )
+            st.metric("Compromiso/Certificado", f"{ratios.get('ratio_compro_certif', 0):.1f}%")
+            st.metric("Devengado/Compromiso", f"{ratios.get('ratio_deveng_compro', 0):.1f}%")
         
         with col2:
-            st.markdown("### 💰 Distribución de gasto")
-            
+            st.markdown("### 💰 Distribución")
             dist = ind["distribucion"]
-            
             if "gasto_corriente_pct" in dist:
-                st.metric(
-                    "Gasto corriente",
-                    f"{dist['gasto_corriente_pct']:.1f}%"
-                )
-                st.metric(
-                    "Gasto de capital",
-                    f"{dist['gasto_capital_pct']:.1f}%"
-                )
-            
-            if "concentracion_pareto" in dist:
-                st.metric(
-                    "Concentración Pareto",
-                    f"{dist['concentracion_pareto']:.1f}%",
-                    help="% del PIM en el top 20% de partidas"
-                )
-                st.metric(
-                    "Partidas activas",
-                    dist.get("partidas_activas", 0),
-                    f"de {dist.get('partidas_totales', 0)} totales"
-                )
+                st.metric("Gasto corriente", f"{dist['gasto_corriente_pct']:.1f}%")
+                st.metric("Gasto de capital", f"{dist['gasto_capital_pct']:.1f}%")
         
         with col3:
             st.markdown("### 🎯 Proyecciones")
-            
             proy = ind["proyecciones"]
-            st.metric(
-                "Proyección cierre",
-                f"{proy['proyeccion_pct']:.1f}%",
-                help="Al ritmo actual"
-            )
-            st.metric(
-                "Brecha esperada",
-                f"S/ {proy['brecha_proyectada']/1e6:.1f}M"
-            )
-            st.metric(
-                "Días restantes",
-                proy.get("dias_restantes_fiscal", 0)
-            )
+            st.metric("Proyección cierre", f"{proy['proyeccion_pct']:.1f}%")
+            st.metric("Días restantes", proy.get("dias_restantes_fiscal", 0))
         
         st.divider()
-        
-        # Tabla resumen (tu componente existente)
         try:
             mostrar_tabla_resumen(st.session_state.df, st.session_state.columnas)
         except Exception as e:
-            st.warning(f"No se pudo mostrar tabla resumen: {e}")
+            st.warning(f"Error en tabla: {e}")
     
     # ═════════════════════════════════════════════════════════════════════
-    # TAB 3: VISTA ANALÍTICA (anomalías, histórico, benchmarks)
+    # TAB 3: VISTA ANALÍTICA
     # ═════════════════════════════════════════════════════════════════════
     
     with tab_analitico:
-        st.markdown("## Análisis profundo · Anomalías y tendencias")
+        st.markdown("## Análisis analítico")
         st.divider()
+        st.info("Gráficos de ejecución detallada")
         
-        # Información sobre anomalías
-        st.markdown("### 🔍 Datos analíticos (v2.1)")
-        st.info(
-            "Esta sección incluirá análisis de anomalías, regresión histórica, "
-            "comparativos multianual y benchmarks. Próxima iteración: carga de Excel histórico."
-        )
+        col1, col2, col3 = st.columns(3)
         
-        # Mostrar gauge de ejecución (componente existente)
-        col_gauge1, col_gauge2, col_gauge3 = st.columns(3)
-        
-        with col_gauge1:
+        with col1:
             try:
-                st.plotly_chart(
-                    crear_gauges(st.session_state.df, st.session_state.columnas),
-                    use_container_width=True
-                )
-            except Exception as e:
-                st.warning(f"No se pudo renderizar gauge: {e}")
+                st.plotly_chart(crear_gauges(st.session_state.df, st.session_state.columnas), use_container_width=True)
+            except:
+                st.warning("No se pudo renderizar gauge")
         
-        with col_gauge2:
-            # Gauge de certificado
+        with col2:
             try:
                 if st.session_state.columnas.get("certificado"):
                     pim = st.session_state.df[st.session_state.columnas["pim"]].sum()
                     cert = st.session_state.df[st.session_state.columnas["certificado"]].sum()
-                    pct_cert = (cert / pim * 100) if pim > 0 else 0
+                    pct = (cert / pim * 100) if pim > 0 else 0
                     
-                    fig_cert = go.Figure(go.Indicator(
+                    fig = go.Figure(go.Indicator(
                         mode="gauge+number",
-                        value=pct_cert,
+                        value=pct,
                         title="Certificado",
-                        gauge={
-                            "axis": {"range": [None, 100]},
-                            "bar": {"color": PALETA["info"]},
-                            "steps": [
-                                {"range": [0, 50], "color": f"{PALETA['danger']}30"},
-                                {"range": [50, 100], "color": f"{PALETA['brand']}30"},
-                            ],
-                        }
+                        gauge={"axis": {"range": [None, 100]}, "bar": {"color": PALETA["info"]}}
                     ))
-                    fig_cert.update_layout(height=300, margin=dict(l=0, r=0, t=60, b=0))
-                    st.plotly_chart(fig_cert, use_container_width=True)
-            except Exception as e:
-                st.warning(f"Error en gauge certificado: {e}")
+                    fig.update_layout(height=300, margin=dict(l=0, r=0, t=60, b=0))
+                    st.plotly_chart(fig, use_container_width=True)
+            except:
+                st.warning("No se pudo renderizar")
         
-        with col_gauge3:
-            # Gauge de compromiso
+        with col3:
             try:
                 if st.session_state.columnas.get("compromiso"):
                     pim = st.session_state.df[st.session_state.columnas["pim"]].sum()
                     comp = st.session_state.df[st.session_state.columnas["compromiso"]].sum()
-                    pct_comp = (comp / pim * 100) if pim > 0 else 0
+                    pct = (comp / pim * 100) if pim > 0 else 0
                     
-                    fig_comp = go.Figure(go.Indicator(
+                    fig = go.Figure(go.Indicator(
                         mode="gauge+number",
-                        value=pct_comp,
+                        value=pct,
                         title="Compromiso",
-                        gauge={
-                            "axis": {"range": [None, 100]},
-                            "bar": {"color": PALETA["warning"]},
-                            "steps": [
-                                {"range": [0, 50], "color": f"{PALETA['danger']}30"},
-                                {"range": [50, 100], "color": f"{PALETA['brand']}30"},
-                            ],
-                        }
+                        gauge={"axis": {"range": [None, 100]}, "bar": {"color": PALETA["warning"]}}
                     ))
-                    fig_comp.update_layout(height=300, margin=dict(l=0, r=0, t=60, b=0))
-                    st.plotly_chart(fig_comp, use_container_width=True)
-            except Exception as e:
-                st.warning(f"Error en gauge compromiso: {e}")
+                    fig.update_layout(height=300, margin=dict(l=0, r=0, t=60, b=0))
+                    st.plotly_chart(fig, use_container_width=True)
+            except:
+                st.warning("No se pudo renderizar")
         
         st.divider()
-        
-        # Mostrar gráfico de evolución mensual (tu componente existente)
-        st.markdown("### 📊 Evolución mensual del devengado")
-        
         try:
-            fig_monthly = monthly_chart(
-                st.session_state.df,
-                st.session_state.columnas.get("devengado", [])
-            )
-            st.plotly_chart(fig_monthly, use_container_width=True)
+            fig = monthly_chart(st.session_state.df, st.session_state.columnas.get("devengado", []))
+            st.plotly_chart(fig, use_container_width=True)
         except Exception as e:
-            st.warning(f"No se pudo renderizar gráfico mensual: {e}")
+            st.warning(f"Error: {e}")
 
 
 # ═══════════════════════════════════════════════════════════════════════════
-# PUNTO DE ENTRADA
-# ═══════════════════════════════════════════════════════════════════════════
-
 if __name__ == "__main__":
     main()
