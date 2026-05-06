@@ -43,15 +43,15 @@ with st.sidebar:
                 engine = "xlrd" if archivo.name.lower().endswith(".xls") else "openpyxl"
                 df_raw = pd.read_excel(archivo, engine=engine)
 
-                # Procesar con DataProcessor
                 processor = DataProcessor(df_raw)
                 processor.procesar_completo()
 
-                # Armar dict de columnas CON LAS CLAVES CORRECTAS que indicadores.py espera
+                # IMPORTANTE: DataProcessor renombra las columnas a PIM, Certificado, etc.
+                # Usar esos nombres renombrados, NO los nombres originales
                 cols = {
-                    "pim": processor.col_pim,
-                    "certificado": processor.col_certificado,
-                    "compromiso": processor.col_compromiso,
+                    "pim": "PIM",
+                    "certificado": "Certificado",
+                    "compromiso": "Compromiso",
                     "generica": processor.col_generica,
                     "devengado": processor.columnas_devengado,
                 }
@@ -62,7 +62,6 @@ with st.sidebar:
                 st.session_state.cols_devengado = processor.obtener_columnas_devengado()
                 st.session_state.col_generica   = processor.col_generica
 
-                # Inicializar programación
                 col_gen = processor.col_generica
                 df_proc = processor.obtener_dataframe()
                 if col_gen and col_gen in df_proc.columns:
