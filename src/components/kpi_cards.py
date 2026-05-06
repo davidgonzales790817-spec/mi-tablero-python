@@ -206,7 +206,7 @@ def panel_alertas(alertas: list):
         "media":   PALETA["info"],
     }
 
-    st.markdown(
+    st.markdown(html, unsafe_allow_html=True)  # ← Esta línea existe
         f"<div style='font-size: 13px; font-weight: 500; margin-bottom: 12px;'>"
         f"Alertas activas · {len(alertas)}</div>",
         unsafe_allow_html=True,
