@@ -1,364 +1,512 @@
-# ═══════════════════════════════════════════════════════════════════════════════
-# src/app.py — PUNTO DE ENTRADA PRINCIPAL
-# ═══════════════════════════════════════════════════════════════════════════════
-#
-# PROPÓSITO:
-#   Este es el archivo principal que ejecuta Streamlit.
-#   Cuando haces: streamlit run src/app.py
-#   Streamlit carga este archivo y ejecuta el código de arriba a abajo.
-#
-# FLUJO GENERAL:
-#   1. Importar todas las dependencias
-#   2. Configurar la página (ancho, tema, etc)
-#   3. Inicializar session_state (cache en memoria)
-#   4. Cargar y procesar archivo Excel (si está disponible)
-#   5. Renderizar sidebar (logo, carga archivo, filtros)
-#   6. Renderizar contenido principal (header, KPIs, 4 tabs)
-#
-# NOTA IMPORTANTE:
-#   En Fase 0 NO hay autenticación. En Fase 1, al inicio se añade:
-#   if not requerir_login():
-#       return
-#   El resto del código se deja igual, solo se agregan capas de autenticación.
-#
-# ═══════════════════════════════════════════════════════════════════════════════
+# src/app.py
+# ═══════════════════════════════════════════════════════════════════════════
+# APLICACIÓN PRINCIPAL · Tablero Presupuestal SIAF v2.0
+# Instituto Peruano de Energía Nuclear (IPEN) · 2026
+# ═══════════════════════════════════════════════════════════════════════════
 
-# Importar las librerías que necesitamos
-import pytz                                # Para manejo de zonas horarias
-import pandas as pd                        # Para trabajar con tablas (DataFrames)
-import streamlit as st                     # El framework web
-from datetime import datetime              # Para fecha y hora
+import streamlit as st
+import pandas as pd
+import plotly.graph_objects as go
+from datetime import date, datetime
 
-# Importar configuración centralizada
-from config import PAGE_CONFIG, CSS_EXTRA
-
-# Importar utilidades (helpers)
-from utils.file_handler import widget_carga_archivo      # Widget de subir archivo
-from utils.data_processor import DataProcessor           # Pipeline de procesamiento
-
-# Importar componentes visuales (cada uno renderiza una parte de la UI)
-from components.sidebar import mostrar_logo, crear_filtros
-from components.gauges import mostrar_indicadores
-from components.summary_table import crear_tabla_resumen
-from components.monthly_chart import crear_grafico_mensual
-from components.programacion_form import (
+# ─ Imports de tu app actual (existentes) ─────────────────────────────────
+from src.utils.data_processor import DataProcessor
+from src.utils.file_handler import FileHandler
+from src.components.sidebar import mostrar_sidebar
+from src.components.gauges import crear_gauges
+from src.components.monthly_chart import monthly_chart
+from src.components.summary_table import mostrar_tabla_resumen
+from src.components.programacion_form import (
     inicializar_programacion,
+    obtener_programacion_df,
     mostrar_formulario_programacion,
     mostrar_resumen_sidebar,
-    obtener_programacion_df,
 )
 
-# ═══════════════════════════════════════════════════════════════════════════════
-# CONFIGURACIÓN DE PÁGINA STREAMLIT
-# ═══════════════════════════════════════════════════════════════════════════════
+# ─ NUEVOS imports (v2.0) ─────────────────────────────────────────────────
+from src.config import PALETA, color_por_avance, MESES_ABREV
+from src.utils.indicadores import calcular_todos_indicadores
+from src.components.kpi_cards import grid_kpis, panel_alertas
 
-# Aplicar la configuración definida en config.py
-st.set_page_config(**PAGE_CONFIG)
 
-# Inyectar CSS personalizado para mejorar el look and feel
+# ═══════════════════════════════════════════════════════════════════════════
+# CONFIGURACIÓN DE STREAMLIT
+# ═══════════════════════════════════════════════════════════════════════════
+
+st.set_page_config(
+    page_title="Tablero Presupuestal SIAF · IPEN",
+    page_icon="📊",
+    layout="wide",
+    initial_sidebar_state="expanded",
+)
+
+# Estilos CSS personalizados
 st.markdown("""
 <style>
-    /* Mejoras para móviles */
-    @media (max-width: 768px) {
-        /* Reduce tamaño de texto en gráficos */
-        .js-plotly-plot .plotly .main-svg text {
-            font-size: 10px !important;
-        }
-        
-        /* Ajusta contenedores */
-        .stPlotlyChart {
-            overflow-x: auto;
-        }
-        
-        /* Mejora tabs en móvil */
-        .stTabs [data-baseweb="tab-list"] {
-            gap: 8px;
-            flex-wrap: wrap;
-        }
-        
-        /* Reduce padding en métricas */
-        .stMetric {
-            padding: 5px;
-        }
+    [data-testid="stMetricValue"] {
+        font-size: 1.8rem;
+        font-weight: 600;
     }
-    
-    /* Contenedor del gráfico sin scroll horizontal no deseado */
-    .stPlotlyChart {
-        width: 100%;
-        overflow-x: visible;
+    [data-testid="stMetricLabel"] {
+        font-size: 0.9rem;
+        text-transform: uppercase;
+        letter-spacing: 0.5px;
+    }
+    .stTabs [data-baseweb="tab-list"] button {
+        font-weight: 600;
+        font-size: 0.95rem;
     }
 </style>
 """, unsafe_allow_html=True)
-# ═══════════════════════════════════════════════════════════════════════════════
-# INICIALIZACIÓN DEL ESTADO (SESSION_STATE)
-# ═══════════════════════════════════════════════════════════════════════════════
-#
-# Streamlit reexecuta todo el archivo cada vez que algo cambia.
-# Para evitar recalcular DataFrames, se guardan en session_state (cache en RAM).
-#
-# EXPLICACIÓN:
-# - session_state es un dict que persiste durante toda la sesión del usuario
-# - Primera vez que entra: crea las claves con valores por defecto (None)
-# - Siguientes recargas: usa lo que guardó sin recrear
 
-def _init_state():
-    """Inicializa las variables de session_state si no existen."""
-    defaults = {
-        "df_raw": None,           # DataFrame crudo del Excel (sin procesar)
-        "df_procesado": None,     # DataFrame procesado y normalizado
-        "cols_devengado": [],     # Lista de nombres de columnas de devengado
-        "archivo_activo": None,   # Ruta al archivo Excel cargado
-    }
-    
-    # Iterar sobre los defaults y crear en session_state si no existen
-    for clave, valor_defecto in defaults.items():
-        if clave not in st.session_state:
-            st.session_state[clave] = valor_defecto
+# ═══════════════════════════════════════════════════════════════════════════
+# INICIALIZACIÓN DE SESSION STATE
+# ═══════════════════════════════════════════════════════════════════════════
+
+if "df" not in st.session_state:
+    st.session_state.df = None
+if "columnas" not in st.session_state:
+    st.session_state.columnas = {}
+if "indicadores" not in st.session_state:
+    st.session_state.indicadores = None
+if "fecha_corte" not in st.session_state:
+    st.session_state.fecha_corte = date.today()
 
 
-# Llamar a inicialización al inicio del script
-_init_state()
-
-# ═══════════════════════════════════════════════════════════════════════════════
-# FUNCIÓN: CARGAR Y PROCESAR EXCEL
-# ═══════════════════════════════════════════════════════════════════════════════
-
-def _cargar_y_procesar():
-    """
-    Procesa el DataFrame que ya está en session_state.
-    
-    PASOS:
-        1. Obtener df_raw de session_state
-        2. Crear DataProcessor y ejecutar pipeline
-        3. Guardar resultados en session_state
-    
-    NOTA:
-        En Streamlit Cloud, el archivo ya está en memoria (cargado por widget_carga_archivo).
-        No necesitamos leerlo de disco.
-    """
-    # Paso 1: Obtener el DataFrame que ya cargó widget_carga_archivo()
-    df_raw = st.session_state.get("df_raw")
-    if df_raw is None:
-        st.error("❌ No hay datos cargados.")
-        return
-    
-    # Paso 2: Crear el procesador y ejecutar pipeline
-    procesador = DataProcessor(df_raw)
-    procesador.procesar_completo()  # Normalizar + detectar + calcular
-    
-    # Paso 3: Extraer resultados
-    df_proc = procesador.obtener_dataframe()      # DataFrame procesado
-    cols_dev = procesador.obtener_columnas_devengado()  # Nombres de columnas
-    
-    # Verificar si hay filas válidas después del procesamiento
-    if df_proc.empty:
-        st.warning("⚠️ El archivo no tiene datos válidos después del procesamiento.")
-        return
-    
-    # Guardar en session_state para las próximas recargas
-    st.session_state.df_procesado = df_proc
-    st.session_state.cols_devengado = cols_dev
-
-
-# ═══════════════════════════════════════════════════════════════════════════════
-# FUNCIÓN: PANTALLA DE BIENVENIDA (SIN DATOS)
-# ═══════════════════════════════════════════════════════════════════════════════
-
-def _pantalla_bienvenida():
-    """Muestra un mensaje instructivo cuando no hay datos cargados."""
-    st.markdown(
-        """
-        <div style="text-align:center; margin-top:100px;">
-          <h1 style="color:#1e3a5f;">📊 Tablero Presupuestal SIAF</h1>
-          <p style="color:#64748b; font-size:17px; margin-top:12px;">
-            Carga un archivo Excel del SIAF desde la barra lateral para comenzar.<br>
-            Formatos soportados: <code>.xls</code> y <code>.xlsx</code>
-          </p>
-          <p style="color:#94a3b8; font-size:13px; margin-top:24px;">
-            Los archivos se procesan en memoria y estarán disponibles durante tu sesión.
-          </p>
-        </div>
-        """,
-        unsafe_allow_html=True,
-    )
-
-
-# ═══════════════════════════════════════════════════════════════════════════════
-# FUNCIÓN: HEADER DE LA PÁGINA
-# ═══════════════════════════════════════════════════════════════════════════════
-
-def _render_header(df_proc: pd.DataFrame):
-    """
-    Renderiza el encabezado con institución, año y fecha de actualización.
-    
-    PARÁMETROS:
-        df_proc: DataFrame procesado (para extraer pliego y año)
-    """
-    # Obtener zona horaria de Lima y hora actual
-    zona_lima = pytz.timezone("America/Lima")
-    fecha_act = datetime.now(zona_lima).strftime("%d/%m/%Y %H:%M")
-    
-    # Extraer información del DataFrame (o valores por defecto)
-    pliego = df_proc["pliego"].iloc[0] if "pliego" in df_proc.columns else "—"
-    ano_eje = df_proc["ano_eje"].iloc[0] if "ano_eje" in df_proc.columns else "—"
-    
-    # Layout en dos columnas: título a izq, fecha a derecha
-    col_h, col_f = st.columns([4, 1])
-    
-    with col_h:
-        st.markdown(
-            f'<p class="header-sub">Ejecución Presupuestal · Año Fiscal {ano_eje}</p>'
-            f'<p class="header-title">{pliego}</p>',
-            unsafe_allow_html=True,
-        )
-    
-    with col_f:
-        st.markdown(
-            f'<p class="header-sub" style="text-align:right">Actualizado</p>'
-            f'<p class="header-sub" style="text-align:right; color:#1e3a5f; font-weight:600">'
-            f'{fecha_act}<br><small>hora Lima, Perú</small></p>',
-            unsafe_allow_html=True,
-        )
-    
-    # Línea separadora
-    st.markdown("---")
-
-
-# ═══════════════════════════════════════════════════════════════════════════════
-# FUNCIÓN: KPIs (MÉTRICAS PRINCIPALES)
-# ═══════════════════════════════════════════════════════════════════════════════
-
-def _render_kpis(df: pd.DataFrame):
-    """
-    Renderiza 5 cajas de métrica con números principales.
-    
-    MÉTRICAS:
-        1. PIM (presupuesto inicial modificado)
-        2. Certificado (presupuesto certificado + % del PIM)
-        3. Compromiso (presupuesto comprometido + % del PIM)
-        4. Devengado (presupuesto ejecutado + % del PIM)
-        5. Saldo (dinero sin gastar + % sin ejecutar)
-    
-    PARÁMETROS:
-        df: DataFrame filtrado (después de aplicar filtros)
-    
-    RETORNA:
-        tuple: (pim, certificado, compromiso, devengado)
-        Se usa para pasar a los gráficos y gauges
-    """
-    # Función auxiliar para formatear números con separador de miles
-    # Convierte 1000000 → "S/ 1.000.000" (formato peruano)
-    fmt = lambda v: f"S/ {round(v):,}".replace(",", ".")
-    
-    # Sumar columnas del DataFrame
-    pim = df["PIM"].sum()                        # Presupuesto inicial
-    cert = df["Certificado"].sum()               # Certificado
-    comp = df["Compromiso_Anual"].sum()          # Compromiso
-    dev = df["Devengado_Total"].sum()            # Devengado
-    saldo = pim - dev                            # Lo que queda
-    
-    # Función auxiliar para porcentaje del PIM
-    pct = lambda v: f"{v / pim * 100:.1f}% del PIM" if pim else "—"
-    
-    # Crear 5 columnas para mostrar las métricas
-    k1, k2, k3, k4, k5 = st.columns(5)
-    
-    k1.metric("PIM", fmt(pim))
-    k2.metric("Certificado", fmt(cert), pct(cert))
-    k3.metric("Compromiso", fmt(comp), pct(comp))
-    k4.metric("Devengado", fmt(dev), pct(dev))
-    k5.metric("Saldo Pendiente", fmt(saldo), f"{saldo / pim * 100:.1f}% sin ejecutar" if pim else "—")
-    
-    return pim, cert, comp, dev
-
-
-# ═══════════════════════════════════════════════════════════════════════════════
-# FUNCIÓN PRINCIPAL: main()
-# ═══════════════════════════════════════════════════════════════════════════════
-#
-# Esta es la función que Streamlit ejecuta.
-# Todo lo importante pasa aquí.
+# ═══════════════════════════════════════════════════════════════════════════
+# FUNCIÓN PRINCIPAL
+# ═══════════════════════════════════════════════════════════════════════════
 
 def main():
-    """Función principal que renderiza toda la app."""
+    """Flujo principal de la aplicación."""
     
-    # --- PASO 1: SIDEBAR ---
-    # Mostrar logo en el sidebar
-    mostrar_logo()
+    # Header principal
+    col_header_title, col_header_info = st.columns([3, 1])
     
-    # Widget de carga de archivo (devuelve ruta si hay archivo activo)
-    archivo_activo = widget_carga_archivo()
+    with col_header_title:
+        st.markdown("# 📊 Tablero Presupuestal SIAF")
+        st.markdown("**Instituto Peruano de Energía Nuclear (IPEN) · Ejercicio fiscal 2026**")
     
-    # --- PASO 2: PROCESAR ARCHIVO SI CAMBIÓ ---
-    # Si hay archivo pero no está procesado aún, procesarlo
-    if st.session_state.df_raw is not None and st.session_state.df_procesado is None:
-        _cargar_y_procesar()
+    with col_header_info:
+        st.markdown(f"""
+        **Corte:** {st.session_state.fecha_corte.strftime('%d/%m/%Y')}
+        
+        **Status:** {'🟢 En seguimiento' if st.session_state.df is not None else '⚠️ Cargando datos'}
+        """)
     
-    # --- PASO 3: PANTALLA DE BIENVENIDA (SI SIN DATOS) ---
-    # Si no hay datos, mostrar mensaje instructivo
-    if st.session_state.df_procesado is None:
-        _pantalla_bienvenida()
-        return  # Salir sin mostrar el resto
+    st.divider()
     
-    # --- PASO 4: EXTRAER DATOS DE SESSION_STATE ---
-    # Si llegamos aquí, hay datos procesados
-    df_proc = st.session_state.df_procesado
-    cols_dev = st.session_state.cols_devengado
+    # ─────────────────────────────────────────────────────────────────────
+    # SIDEBAR
+    # ─────────────────────────────────────────────────────────────────────
     
-    # --- PASO 5: SIDEBAR - FILTROS ---
-    st.sidebar.markdown("---")
-    df_filtrado = crear_filtros(df_proc)  # Aplica filtros y devuelve DF filtrado
+    with st.sidebar:
+        st.markdown("### 📁 Carga de datos")
+        
+        # Widget de carga de archivo
+        archivo = st.file_uploader(
+            "Subir archivo Excel SIAF",
+            type=['xlsx', 'xls'],
+            help="Archivo exportado directamente del SIAF-MEF"
+        )
+        
+        if archivo:
+            # Procesar archivo con DataProcessor
+            with st.spinner("🔄 Procesando archivo..."):
+                file_handler = FileHandler()
+                df_raw = file_handler.cargar_excel(archivo)
+                
+                # Detectar automáticamente columnas
+                processor = DataProcessor(df_raw)
+                processor.detectar_columnas()
+                
+                st.session_state.df = df_raw
+                st.session_state.columnas = processor.columnas
+                
+                # Inicializar programación si hay genéricas
+                if "generica" in processor.columnas:
+                    genericas = sorted(df_raw[processor.columnas["generica"]].unique().tolist())
+                    inicializar_programacion(genericas)
+                
+                st.success("✅ Archivo procesado correctamente")
+        
+        if st.session_state.df is not None:
+            st.markdown("---")
+            
+            # Mostrar resumen en sidebar
+            mostrar_resumen_sidebar()
+            
+            st.markdown("---")
+            
+            # Selector de fecha de corte
+            fecha_selector = st.date_input(
+                "Fecha de corte (para proyecciones)",
+                value=st.session_state.fecha_corte,
+                max_value=date(2026, 12, 31),
+                min_value=date(2026, 1, 1)
+            )
+            st.session_state.fecha_corte = fecha_selector
     
-    # --- PASO 6: INICIALIZAR PROGRAMACIÓN ---
-    # Necesario antes de los tabs para que Tab3 tenga datos
-    genericas_ord = sorted(df_filtrado["generica"].unique().tolist())
-    inicializar_programacion(genericas_ord)
-    mostrar_resumen_sidebar()
+    # ─────────────────────────────────────────────────────────────────────
+    # CONTENIDO PRINCIPAL
+    # ─────────────────────────────────────────────────────────────────────
     
-    # --- VERIFICACIÓN: HAY DATOS CON FILTROS APLICADOS? ---
-    if df_filtrado.empty:
-        st.warning("⚠️ Sin datos para los filtros actuales.")
+    if st.session_state.df is None:
+        st.info("👈 Carga un archivo Excel SIAF en el sidebar para comenzar")
         return
     
-    # --- PASO 7: HEADER Y KPIs ---
-    _render_header(df_proc)
-    pim, cert, comp, dev = _render_kpis(df_filtrado)
+    # Calcular indicadores v2.0 (los 47 indicadores derivables)
+    st.session_state.indicadores = calcular_todos_indicadores(
+        st.session_state.df,
+        st.session_state.columnas,
+        fecha_corte=st.session_state.fecha_corte,
+    )
     
-    # --- PASO 8: TABS PRINCIPALES ---
-    # Crear 4 tabs
-    tab1, tab2, tab3, tab4 = st.tabs([
-        "📈 Indicadores",
-        "📊 Por Genérica",
-        "📆 Evolución Mensual",
-        "📅 Programación",
+    ind = st.session_state.indicadores
+    
+    # Crear tabs para las 3 vistas
+    tab_ejecutivo, tab_operacional, tab_analitico = st.tabs([
+        "📊 Ejecutivo",
+        "⚙️ Operacional",
+        "🔬 Analítico",
     ])
     
-    # TAB 1: Gauges (indicadores visuales)
-    with tab1:
-        mostrar_indicadores(pim, cert, comp, dev)
+    # ═════════════════════════════════════════════════════════════════════
+    # TAB 1: VISTA EJECUTIVA (4-6 KPIs, decisión de reasignación)
+    # ═════════════════════════════════════════════════════════════════════
     
-    # TAB 2: Tabla de resumen por genérica
-    with tab2:
-        crear_tabla_resumen(df_filtrado)
+    with tab_ejecutivo:
+        st.markdown("## Ejecución presupuestal · Visión ejecutiva")
+        st.markdown(f"*Actualizado al {ind['fecha_corte']}*")
+        st.divider()
+        
+        # KPI CARDS principales (8 cards en grid responsivo)
+        st.markdown("### 📈 Indicadores principales")
+        
+        grid_kpis([
+            {
+                "titulo": "PIM",
+                "valor": ind["ejecucion"]["pim_total"],
+                "formato": "soles",
+                "subtitulo": "Presupuesto Inicial Modificado",
+            },
+            {
+                "titulo": "Certificado",
+                "valor": ind["ejecucion"]["certificado_total"],
+                "formato": "soles",
+                "progreso": ind["ejecucion"]["pct_certificado"],
+                "target": 33,
+                "estado": color_por_avance(ind["ejecucion"]["pct_certificado"]),
+                "delta": ind["ejecucion"]["pct_certificado"] - 30,
+                "delta_label": "vs meta teórica",
+            },
+            {
+                "titulo": "Compromiso",
+                "valor": ind["ejecucion"]["compromiso_total"],
+                "formato": "soles",
+                "progreso": ind["ejecucion"]["pct_compromiso"],
+                "target": 33,
+                "estado": color_por_avance(ind["ejecucion"]["pct_compromiso"]),
+            },
+            {
+                "titulo": "Devengado",
+                "valor": ind["ejecucion"]["devengado_total"],
+                "formato": "soles",
+                "progreso": ind["ejecucion"]["pct_avance_financiero"],
+                "target": 33,
+                "estado": color_por_avance(ind["ejecucion"]["pct_avance_financiero"]),
+                "subtitulo": "📊 Indicador oficial MEF",
+            },
+            {
+                "titulo": "Saldo certificable",
+                "valor": ind["ejecucion"]["saldo_certificable"],
+                "formato": "soles",
+                "subtitulo": "Aún por certificar",
+                "estado": "info",
+            },
+            {
+                "titulo": "Pendiente de girar",
+                "valor": ind["ejecucion"]["pendiente_girar"],
+                "formato": "soles",
+                "estado": "warning" if ind["ejecucion"]["pendiente_girar"] > 0 else "success",
+                "subtitulo": "En tesorería",
+            },
+            {
+                "titulo": "Forecast cierre",
+                "valor": ind["proyecciones"]["proyeccion_pct"],
+                "valor_es_porcentaje": True,
+                "formato": "porcentaje",
+                "estado": color_por_avance(ind["proyecciones"]["proyeccion_pct"]),
+                "subtitulo": f"Brecha: S/ {ind['proyecciones']['brecha_proyectada']/1e6:.1f}M",
+            },
+            {
+                "titulo": "Velocidad",
+                "valor": ind["proyecciones"]["multiplicador_aceleracion"],
+                "formato": "numero",
+                "estado": "danger" if ind["proyecciones"]["multiplicador_aceleracion"] > 2 else "warning",
+                "subtitulo": f"{ind['proyecciones']['multiplicador_aceleracion']:.1f}× del ritmo actual",
+            },
+        ], columnas=4)
+        
+        st.divider()
+        
+        # ALERTAS
+        st.markdown("### ⚠️ Alertas activas")
+        panel_alertas(ind["alertas"])
+        
+        st.divider()
+        
+        # CURVA S y ejecución por genérica
+        col_curva, col_generica = st.columns([1.2, 1])
+        
+        with col_curva:
+            st.markdown("### 📉 Curva S · Devengado vs Programado")
+            
+            # Obtener devengado mensual real
+            meses_dev = []
+            acumulado = 0
+            for col in st.session_state.columnas.get("devengado", []):
+                acumulado += st.session_state.df[col].sum()
+                meses_dev.append(acumulado)
+            
+            # Obtener programación
+            df_prog = obtener_programacion_df()
+            if df_prog is not None:
+                meses_prog = []
+                acumulado_prog = 0
+                for mes in MESES_ABREV:
+                    if mes in df_prog.columns:
+                        acumulado_prog += df_prog[mes].sum()
+                    meses_prog.append(acumulado_prog)
+            else:
+                meses_prog = [0] * len(MESES_ABREV)
+            
+            # Crear gráfico de curva S
+            fig_curva = go.Figure()
+            
+            fig_curva.add_trace(go.Scatter(
+                x=MESES_ABREV, y=meses_dev,
+                name="Devengado real",
+                mode="lines+markers",
+                line=dict(color=PALETA["brand"], width=3),
+                marker=dict(size=8, symbol="circle"),
+                fill="tozeroy",
+                fillcolor=f"{PALETA['brand']}30",
+            ))
+            
+            fig_curva.add_trace(go.Scatter(
+                x=MESES_ABREV, y=meses_prog,
+                name="Programado",
+                mode="lines",
+                line=dict(color=PALETA["info"], width=2),
+                dash="solid",
+            ))
+            
+            fig_curva.update_layout(
+                hovermode="x unified",
+                template="plotly_white",
+                height=300,
+                margin=dict(l=0, r=0, t=30, b=0),
+                font=dict(family="Inter, sans-serif", size=11),
+            )
+            
+            st.plotly_chart(fig_curva, use_container_width=True)
+        
+        with col_generica:
+            st.markdown("### 📊 Avance por genérica")
+            
+            if "generica" in st.session_state.columnas:
+                gen_avance = []
+                for gen in st.session_state.df[st.session_state.columnas["generica"]].unique():
+                    df_gen = st.session_state.df[st.session_state.df[st.session_state.columnas["generica"]] == gen]
+                    pim_gen = df_gen[st.session_state.columnas["pim"]].sum() if st.session_state.columnas.get("pim") else 0
+                    dev_gen = sum(df_gen[c].sum() for c in st.session_state.columnas.get("devengado", []))
+                    pct = (dev_gen / pim_gen * 100) if pim_gen > 0 else 0
+                    gen_avance.append({"genérica": gen, "avance": pct})
+                
+                gen_avance_sorted = sorted(gen_avance, key=lambda x: x["avance"], reverse=True)
+                
+                for item in gen_avance_sorted:
+                    color = color_por_avance(item["avance"])
+                    st.markdown(f"""
+                    <div style="margin-bottom: 8px;">
+                        <div style="display: flex; justify-content: space-between; margin-bottom: 4px;">
+                            <span style="font-size: 11px; font-weight: 500;">{item['genérica'][:40]}</span>
+                            <span style="font-size: 11px; font-weight: 500;">{item['avance']:.1f}%</span>
+                        </div>
+                        <div style="height: 6px; background: #e8e8e8; border-radius: 3px; position: relative;">
+                            <div style="position: absolute; height: 100%; width: {min(item['avance'], 100):.1f}%; background: {color}; border-radius: 3px;"></div>
+                            <div style="position: absolute; height: 100%; width: 1px; left: 33%; background: #999;"></div>
+                        </div>
+                    </div>
+                    """, unsafe_allow_html=True)
     
-    # TAB 3: Gráfico mensual
-    with tab3:
-        crear_grafico_mensual(df_filtrado, cols_dev, obtener_programacion_df())
+    # ═════════════════════════════════════════════════════════════════════
+    # TAB 2: VISTA OPERACIONAL (drill-down, ratios, top clasificadores)
+    # ═════════════════════════════════════════════════════════════════════
     
-    # TAB 4: Formulario de programación editable
-    with tab4:
-        mostrar_formulario_programacion(genericas_ord)
+    with tab_operacional:
+        st.markdown("## Análisis operacional · Detalle por categoría")
+        st.divider()
+        
+        # Tabs interiores
+        col1, col2, col3 = st.columns(3)
+        
+        with col1:
+            st.markdown("### 📈 Ratios de eficiencia")
+            
+            ratios = ind["eficiencia"]
+            st.metric(
+                "Ratio Compromiso/Certificado",
+                f"{ratios.get('ratio_compro_certif', 0):.1f}%",
+                help="% del certificado que se formaliza en compromiso"
+            )
+            st.metric(
+                "Ratio Devengado/Compromiso",
+                f"{ratios.get('ratio_deveng_compro', 0):.1f}%",
+                help="% del compromiso que se materializa"
+            )
+            st.metric(
+                "Velocidad diaria",
+                f"S/ {ratios.get('velocidad_diaria_soles', 0)/1e3:.1f}K",
+                help="Soles devengados por día"
+            )
+        
+        with col2:
+            st.markdown("### 💰 Distribución de gasto")
+            
+            dist = ind["distribucion"]
+            
+            if "gasto_corriente_pct" in dist:
+                st.metric(
+                    "Gasto corriente",
+                    f"{dist['gasto_corriente_pct']:.1f}%"
+                )
+                st.metric(
+                    "Gasto de capital",
+                    f"{dist['gasto_capital_pct']:.1f}%"
+                )
+            
+            if "concentracion_pareto" in dist:
+                st.metric(
+                    "Concentración Pareto",
+                    f"{dist['concentracion_pareto']:.1f}%",
+                    help="% del PIM en el top 20% de partidas"
+                )
+                st.metric(
+                    "Partidas activas",
+                    dist.get("partidas_activas", 0),
+                    f"de {dist.get('partidas_totales', 0)} totales"
+                )
+        
+        with col3:
+            st.markdown("### 🎯 Proyecciones")
+            
+            proy = ind["proyecciones"]
+            st.metric(
+                "Proyección cierre",
+                f"{proy['proyeccion_pct']:.1f}%",
+                help="Al ritmo actual"
+            )
+            st.metric(
+                "Brecha esperada",
+                f"S/ {proy['brecha_proyectada']/1e6:.1f}M"
+            )
+            st.metric(
+                "Días restantes",
+                proy.get("dias_restantes_fiscal", 0)
+            )
+        
+        st.divider()
+        
+        # Tabla resumen (tu componente existente)
+        mostrar_tabla_resumen(st.session_state.df, st.session_state.columnas)
+    
+    # ═════════════════════════════════════════════════════════════════════
+    # TAB 3: VISTA ANALÍTICA (anomalías, histórico, benchmarks)
+    # ═════════════════════════════════════════════════════════════════════
+    
+    with tab_analitico:
+        st.markdown("## Análisis profundo · Anomalías y tendencias")
+        st.divider()
+        
+        # Información sobre anomalías
+        st.markdown("### 🔍 Datos analíticos (v2.1)")
+        st.info(
+            "Esta sección incluirá análisis de anomalías, regresión histórica, "
+            "comparativos multianual y benchmarks. Próxima iteración: carga de Excel histórico."
+        )
+        
+        # Mostrar gauge de ejecución (componente existente)
+        col_gauge1, col_gauge2, col_gauge3 = st.columns(3)
+        
+        with col_gauge1:
+            st.plotly_chart(
+                crear_gauges(st.session_state.df, st.session_state.columnas),
+                use_container_width=True
+            )
+        
+        with col_gauge2:
+            # Gauge de certificado
+            if st.session_state.columnas.get("certificado"):
+                pim = st.session_state.df[st.session_state.columnas["pim"]].sum()
+                cert = st.session_state.df[st.session_state.columnas["certificado"]].sum()
+                pct_cert = (cert / pim * 100) if pim > 0 else 0
+                
+                fig_cert = go.Figure(go.Indicator(
+                    mode="gauge+number",
+                    value=pct_cert,
+                    title="Certificado",
+                    gauge={
+                        "axis": {"range": [None, 100]},
+                        "bar": {"color": PALETA["info"]},
+                        "steps": [
+                            {"range": [0, 50], "color": f"{PALETA['danger']}30"},
+                            {"range": [50, 100], "color": f"{PALETA['brand']}30"},
+                        ],
+                    }
+                ))
+                fig_cert.update_layout(height=300, margin=dict(l=0, r=0, t=60, b=0))
+                st.plotly_chart(fig_cert, use_container_width=True)
+        
+        with col_gauge3:
+            # Gauge de compromiso
+            if st.session_state.columnas.get("compromiso"):
+                pim = st.session_state.df[st.session_state.columnas["pim"]].sum()
+                comp = st.session_state.df[st.session_state.columnas["compromiso"]].sum()
+                pct_comp = (comp / pim * 100) if pim > 0 else 0
+                
+                fig_comp = go.Figure(go.Indicator(
+                    mode="gauge+number",
+                    value=pct_comp,
+                    title="Compromiso",
+                    gauge={
+                        "axis": {"range": [None, 100]},
+                        "bar": {"color": PALETA["warning"]},
+                        "steps": [
+                            {"range": [0, 50], "color": f"{PALETA['danger']}30"},
+                            {"range": [50, 100], "color": f"{PALETA['brand']}30"},
+                        ],
+                    }
+                ))
+                fig_comp.update_layout(height=300, margin=dict(l=0, r=0, t=60, b=0))
+                st.plotly_chart(fig_comp, use_container_width=True)
+        
+        st.divider()
+        
+        # Mostrar gráfico de evolución mensual (tu componente existente)
+        st.markdown("### 📊 Evolución mensual del devengado")
+        
+        fig_monthly = monthly_chart(
+            st.session_state.df,
+            st.session_state.columnas.get("devengado", [])
+        )
+        st.plotly_chart(fig_monthly, use_container_width=True)
 
 
-# ═══════════════════════════════════════════════════════════════════════════════
+# ═══════════════════════════════════════════════════════════════════════════
 # PUNTO DE ENTRADA
-# ═══════════════════════════════════════════════════════════════════════════════
-# Cuando ejecutas: streamlit run src/app.py
-# Python ejecuta el código de arriba a abajo, y al final llama a main()
+# ═══════════════════════════════════════════════════════════════════════════
 
 if __name__ == "__main__":
     main()
-
-# ═══════════════════════════════════════════════════════════════════════════════
-# FIN DE APP.PY
-# ═══════════════════════════════════════════════════════════════════════════════
