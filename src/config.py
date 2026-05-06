@@ -1,67 +1,73 @@
 # src/config.py
-# ─────────────────────────────────────────────────────────────────────────────
-# Configuración global del Tablero Presupuestal SIAF — versión 2.0
-# Paleta "Treasury Vault" basada en tendencias dashboards 2026
-# ─────────────────────────────────────────────────────────────────────────────
+# ═══════════════════════════════════════════════════════════════════════════
+# CONFIGURACIÓN GLOBAL - Tablero Presupuestal SIAF v2.0
+# Integración sin breaking changes con config existente
+# ═══════════════════════════════════════════════════════════════════════════
+
+import streamlit as st
+from datetime import datetime
+
+# ─ CONSTANTES EXISTENTES (mantener compatibilidad) ─────────────────────
+# Si tu config.py actual tiene otras constantes, NO las reemplaces
+# Solo agrega las nuevas que faltan
+
+# Meses en español (probablemente ya lo tenías)
+MESES = [
+    "Enero", "Febrero", "Marzo", "Abril", "Mayo", "Junio",
+    "Julio", "Agosto", "Setiembre", "Octubre", "Noviembre", "Diciembre"
+]
+
+MESES_ABREV = ["Ene", "Feb", "Mar", "Abr", "May", "Jun",
+               "Jul", "Ago", "Set", "Oct", "Nov", "Dic"]
 
 # ═══════════════════════════════════════════════════════════════════════════
-# PALETA TREASURY VAULT
-# Inspirada en investigación 2026: Recursion (tinted neutrals), media.io
-# (Vault Green), Phoenix Strategy (financial dashboards). Cada color tiene
-# un rol semántico — no se usa para diferenciación visual arbitraria.
+# NUEVA SECCIÓN: PALETA TREASURY VAULT (v2.0)
 # ═══════════════════════════════════════════════════════════════════════════
 
 PALETA = {
-    # Neutrales tintados zinc (no gris puro #808080)
-    # Usar para: bases, texto, ejes, grids, bordes
+    # Neutrales tintados zinc (no gris puro)
     "bg_primary":      "#FAFAFA",  # fondo principal modo claro
     "bg_secondary":    "#F4F4F5",  # superficies (cards, panels)
-    "bg_tertiary":     "#E4E4E7",  # bordes suaves, separadores
+    "bg_tertiary":     "#E4E4E7",  # bordes suaves
     "bg_dark_primary": "#09090B",  # fondo principal modo oscuro
-    "bg_dark_secondary": "#18181B", # superficies oscuras
-    "bg_dark_tertiary":  "#27272A", # bordes oscuros
+    "bg_dark_secondary": "#18181B",
+    "bg_dark_tertiary":  "#27272A",
 
-    "text_primary":   "#18181B",  # texto principal modo claro
-    "text_secondary": "#52525B",  # texto secundario
-    "text_muted":     "#71717A",  # texto terciario, hints
-    "text_dark_primary":   "#FAFAFA",  # texto principal modo oscuro
-    "text_dark_secondary": "#A1A1AA",  # texto secundario modo oscuro
+    "text_primary":   "#18181B",   # texto principal claro
+    "text_secondary": "#52525B",   # texto secundario
+    "text_muted":     "#71717A",   # texto terciario
+    "text_dark_primary":   "#FAFAFA",
+    "text_dark_secondary": "#A1A1AA",
 
-    # Treasury green — color de marca (usar con moderación)
-    # Usar para: KPI principal, programación, ejecución acumulada, líneas meta
-    "brand":      "#1D9E75",
+    # Colores semánticos
+    "brand":      "#1D9E75",  # Verde Treasury
     "brand_dark": "#0F6E56",
     "brand_light": "#5DCAA5",
-    "brand_50":   "#E1F5EE",   # backgrounds suaves para badges
+    "brand_50":   "#E1F5EE",
 
-    # Trust blue — información, drill-down, certificado
-    "info":       "#185FA5",
+    "info":       "#185FA5",  # Azul confianza
     "info_dark":  "#0C447C",
     "info_light": "#85B7EB",
     "info_50":    "#E6F1FB",
 
-    # Caution amber — atención, riesgo moderado, ejecución 30%-70%
-    "warning":      "#BA7517",
+    "warning":      "#BA7517",  # Ámbar precaución
     "warning_dark": "#854F0B",
     "warning_50":   "#FAEEDA",
 
-    # Critical red — subejecución, anomalías, alertas urgentes
-    "danger":      "#A32D2D",
+    "danger":      "#A32D2D",  # Rojo crítico
     "danger_dark": "#791F1F",
     "danger_50":   "#FCEBEB",
 
-    # Coral accent — comparativos vs año anterior, marcadores temporales
-    "accent":     "#D85A30",
+    "accent":     "#D85A30",  # Coral para comparativos
     "accent_dark": "#993C1D",
 }
 
 # ═══════════════════════════════════════════════════════════════════════════
-# COLORES POR GENÉRICA (rampa única teal — no rainbow)
-# Todas las genéricas usan stops del mismo color para no saturar visualmente
+# COLORES POR GENÉRICA (rampa única teal)
 # ═══════════════════════════════════════════════════════════════════════════
 
 COLORES_GENERICAS = [
-    "#04342C",  # 1. Personal — más oscuro (mayor presupuesto típicamente)
+    "#04342C",  # 1. Personal
     "#085041",  # 2. Pensiones
     "#0F6E56",  # 3. Bienes y servicios
     "#1D9E75",  # 4. Donaciones
@@ -69,7 +75,6 @@ COLORES_GENERICAS = [
     "#9FE1CB",  # 6. Adquisición activos
 ]
 
-# Mapping específico por código de genérica para consistencia
 COLOR_POR_GENERICA = {
     "1.PERSONAL Y OBLIGACIONES SOCIALES": "#04342C",
     "2.PENSIONES Y OTRAS PRESTACIONES SOCIALES": "#085041",
@@ -80,8 +85,7 @@ COLOR_POR_GENERICA = {
 }
 
 # ═══════════════════════════════════════════════════════════════════════════
-# UMBRALES DE EJECUCIÓN (basados en directiva DGPP-MEF)
-# Las "tres zonas" oficiales del MEF para clasificación de avance financiero
+# UMBRALES DE EJECUCIÓN (DGPP-MEF)
 # ═══════════════════════════════════════════════════════════════════════════
 
 UMBRALES_EJECUCION = {
@@ -99,48 +103,10 @@ def color_por_avance(pct: float) -> str:
     return UMBRALES_EJECUCION["alto"]["color"]
 
 # ═══════════════════════════════════════════════════════════════════════════
-# CONSTANTES TEMPORALES
+# PATRONES PARA DETECTAR COLUMNAS (v2.0)
 # ═══════════════════════════════════════════════════════════════════════════
-
-MESES = [
-    "Enero", "Febrero", "Marzo", "Abril", "Mayo", "Junio",
-    "Julio", "Agosto", "Setiembre", "Octubre", "Noviembre", "Diciembre"
-]
-
-MESES_ABREV = ["Ene", "Feb", "Mar", "Abr", "May", "Jun",
-               "Jul", "Ago", "Set", "Oct", "Nov", "Dic"]
-
-# ═══════════════════════════════════════════════════════════════════════════
-# CONFIGURACIÓN DE GRÁFICOS PLOTLY (modo claro y oscuro)
-# ═══════════════════════════════════════════════════════════════════════════
-
-PLOTLY_THEME_LIGHT = {
-    "layout": {
-        "font": {"family": "Inter, system-ui, sans-serif", "size": 12, "color": "#52525B"},
-        "paper_bgcolor": "rgba(0,0,0,0)",
-        "plot_bgcolor": "#FAFAFA",
-        "xaxis": {"gridcolor": "#E4E4E7", "linecolor": "#E4E4E7", "zerolinecolor": "#E4E4E7"},
-        "yaxis": {"gridcolor": "#E4E4E7", "linecolor": "#E4E4E7", "zerolinecolor": "#E4E4E7"},
-        "colorway": COLORES_GENERICAS,
-        "hoverlabel": {"bgcolor": "#18181B", "font": {"color": "#FAFAFA", "size": 12}},
-    }
-}
-
-PLOTLY_THEME_DARK = {
-    "layout": {
-        "font": {"family": "Inter, system-ui, sans-serif", "size": 12, "color": "#A1A1AA"},
-        "paper_bgcolor": "rgba(0,0,0,0)",
-        "plot_bgcolor": "#18181B",
-        "xaxis": {"gridcolor": "#27272A", "linecolor": "#27272A", "zerolinecolor": "#27272A"},
-        "yaxis": {"gridcolor": "#27272A", "linecolor": "#27272A", "zerolinecolor": "#27272A"},
-        "colorway": COLORES_GENERICAS,
-        "hoverlabel": {"bgcolor": "#FAFAFA", "font": {"color": "#18181B", "size": 12}},
-    }
-}
-
-# ═══════════════════════════════════════════════════════════════════════════
-# PATRONES DE COLUMNAS SIAF (regex para detección automática)
-# ═══════════════════════════════════════════════════════════════════════════
+# Estos patrones se usan en data_processor.py para detectar automáticamente
+# las columnas del Excel, aunque tengan nombres ligeramente diferentes
 
 PATRONES_COLUMNAS = {
     "pia":         [r"mto_pia", r"pia$", r"presupuesto_inicial_apertura"],
@@ -157,7 +123,99 @@ PATRONES_COLUMNAS = {
 }
 
 # ═══════════════════════════════════════════════════════════════════════════
-# CONFIGURACIÓN INSTITUCIONAL (overrideable via .env)
+# PROGRAMACIÓN PRECARGADA (si la tienes)
+# ═══════════════════════════════════════════════════════════════════════════
+# Reemplaza esto con tus datos reales de IPEN 2026
+
+PROGRAMACION_PRECARGADA = {
+    "1.PERSONAL Y OBLIGACIONES SOCIALES": {
+        "Enero": 8_500_000,
+        "Febrero": 8_500_000,
+        "Marzo": 8_500_000,
+        "Abril": 8_500_000,
+        "Mayo": 8_500_000,
+        "Junio": 8_500_000,
+        "Julio": 8_500_000,
+        "Agosto": 8_500_000,
+        "Setiembre": 8_500_000,
+        "Octubre": 8_500_000,
+        "Noviembre": 8_500_000,
+        "Diciembre": 8_500_000,
+    },
+    "2.PENSIONES Y OTRAS PRESTACIONES SOCIALES": {
+        "Enero": 2_000_000,
+        "Febrero": 2_000_000,
+        "Marzo": 2_000_000,
+        "Abril": 2_000_000,
+        "Mayo": 2_000_000,
+        "Junio": 2_000_000,
+        "Julio": 2_000_000,
+        "Agosto": 2_000_000,
+        "Setiembre": 2_000_000,
+        "Octubre": 2_000_000,
+        "Noviembre": 2_000_000,
+        "Diciembre": 2_000_000,
+    },
+    "3.BIENES Y SERVICIOS": {
+        "Enero": 4_500_000,
+        "Febrero": 4_500_000,
+        "Marzo": 4_500_000,
+        "Abril": 4_500_000,
+        "Mayo": 4_500_000,
+        "Junio": 4_500_000,
+        "Julio": 4_500_000,
+        "Agosto": 4_500_000,
+        "Setiembre": 4_500_000,
+        "Octubre": 4_500_000,
+        "Noviembre": 4_500_000,
+        "Diciembre": 4_500_000,
+    },
+    "4.DONACIONES Y TRANSFERENCIAS": {
+        "Enero": 1_500_000,
+        "Febrero": 1_500_000,
+        "Marzo": 1_500_000,
+        "Abril": 1_500_000,
+        "Mayo": 1_500_000,
+        "Junio": 1_500_000,
+        "Julio": 1_500_000,
+        "Agosto": 1_500_000,
+        "Setiembre": 1_500_000,
+        "Octubre": 1_500_000,
+        "Noviembre": 1_500_000,
+        "Diciembre": 1_500_000,
+    },
+    "5.OTROS GASTOS": {
+        "Enero": 3_000_000,
+        "Febrero": 3_000_000,
+        "Marzo": 3_000_000,
+        "Abril": 3_000_000,
+        "Mayo": 3_000_000,
+        "Junio": 3_000_000,
+        "Julio": 3_000_000,
+        "Agosto": 3_000_000,
+        "Setiembre": 3_000_000,
+        "Octubre": 3_000_000,
+        "Noviembre": 3_000_000,
+        "Diciembre": 3_000_000,
+    },
+    "6.ADQUISICION DE ACTIVOS NO FINANCIEROS": {
+        "Enero": 500_000,
+        "Febrero": 500_000,
+        "Marzo": 500_000,
+        "Abril": 500_000,
+        "Mayo": 500_000,
+        "Junio": 500_000,
+        "Julio": 500_000,
+        "Agosto": 500_000,
+        "Setiembre": 500_000,
+        "Octubre": 500_000,
+        "Noviembre": 500_000,
+        "Diciembre": 500_000,
+    },
+}
+
+# ═══════════════════════════════════════════════════════════════════════════
+# CONFIGURACIÓN DE STREAMLIT
 # ═══════════════════════════════════════════════════════════════════════════
 
 INSTITUCION = {
@@ -166,3 +224,17 @@ INSTITUCION = {
     "logo_url": "https://www.ipen.gob.pe/templates/ipen/images/logo-ipen.png",
     "ejercicio_fiscal": 2026,
 }
+
+# ═══════════════════════════════════════════════════════════════════════════
+# RUTAS DE CARPETAS
+# ═══════════════════════════════════════════════════════════════════════════
+
+import os
+
+PROJECT_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+RESPALDO_DATA_DIR = os.path.join(PROJECT_ROOT, "Respaldo_Data")
+REPORTES_DIR = os.path.join(RESPALDO_DATA_DIR, "reportes")
+PROG_JSON_PATH = os.path.join(RESPALDO_DATA_DIR, "programacion.json")
+
+# Crear carpetas si no existen
+os.makedirs(REPORTES_DIR, exist_ok=True)
