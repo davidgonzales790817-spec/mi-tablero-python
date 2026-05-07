@@ -1,8 +1,8 @@
 # src/components/kpi_cards.py
-# ─────────────────────────────────────────────────────────────────────────────
+# ─────────────────────────────────────────────────────────────────[...]
 # KPI cards modernos con sparklines, status colors y tendencias
 # Reemplaza/complementa los st.metric tradicionales con cards más informativas
-# ─────────────────────────────────────────────────────────────────────────────
+# ─────────────────────────────────────────────────────────────────[...]
 
 import streamlit as st
 import plotly.graph_objects as go
@@ -206,7 +206,7 @@ def panel_alertas(alertas: list):
         "media":   PALETA["info"],
     }
 
-    st.markdown(html, unsafe_allow_html=True)  # ← Esta línea existe
+    st.markdown(
         f"<div style='font-size: 13px; font-weight: 500; margin-bottom: 12px;'>"
         f"Alertas activas · {len(alertas)}</div>",
         unsafe_allow_html=True,
