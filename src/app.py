@@ -42,9 +42,9 @@ for k, v in session_defaults.items():
     if k not in st.session_state:
         st.session_state[k] = v
 
-# ──────────────────────────────────────────────────────────────────────────
+# ──────────────────────────────────────────────────────────────────[...]
 # SIDEBAR - Carga de datos
-# ──────────────────────────────────────────────────────────────────────────
+# ──────────────────────────────────────────────────────────────────[...]
 with st.sidebar:
     # Logo
     try:
@@ -118,9 +118,9 @@ with st.sidebar:
             max_value=date(2026, 12, 31)
         )
 
-# ──────────────────────────────────────────────────────────────────────────
+# ──────────────────────────────────────────────────────────────────[...]
 # HEADER - Título y metadatos
-# ──────────────────────────────────────────────────────────────────────────
+# ──────────────────────────────────────────────────────────────────[...]
 col_titulo, col_fecha = st.columns([3, 1])
 
 with col_titulo:
@@ -154,16 +154,16 @@ except Exception as e:
     st.error(f"❌ Error calculando indicadores: {str(e)}")
     st.stop()
 
-# ──────────────────────────────────────────────────────────────────────────
+# ──────────────────────────────────────────────────────────────────[...]
 # TABS - Vistas principales
-# ──────────────────────────────────────────────────────────────────────────
+# ──────────────────────────────────────────────────────────────────[...]
 tab_ejecutivo, tab_operacional, tab_analitico = st.tabs(
     ["📊 Ejecutivo", "⚙️ Operacional", "🔬 Analítico"]
 )
 
-# ──────────────────────────────────────────────────────────────────────────
+# ──────────────────────────────────────────────────────────────────[...]
 # TAB 1: EJECUTIVO
-# ──────────────────────────────────────────────────────────────────────────
+# ──────────────────────────────────────────────────────────────────[...]
 with tab_ejecutivo:
     st.markdown("## Ejecución presupuestal")
     st.divider()
@@ -298,20 +298,13 @@ with tab_ejecutivo:
                         pct = (dev_g / pim_g * 100) if pim_g > 0 else 0
                         color = color_por_avance(pct)
                         
-                        st.markdown(
-                            f"""
-                            <div style="margin-bottom:8px;">
-                                <div style="display:flex;justify-content:space-between;font-size:12px;margin-bottom:3px;">
-                                    <span title="{str(gen)}">{str(gen)[:30]}</span>
-                                    <b>{pct:.1f}%</b>
-                                </div>
-                                <div style="height:6px;background:#e4e4e7;border-radius:3px;overflow:hidden;">
-                                    <div style="height:100%;width:{min(pct,100):.1f}%;background:{color};border-radius:3px;transition:width 0.3s;"></div>
-                                </div>
-                            </div>
-                            """,
-                            unsafe_allow_html=True
-                        )
+                        # Usar componentes nativos de Streamlit en lugar de HTML
+                        col1, col2 = st.columns([3, 1])
+                        with col1:
+                            st.write(str(gen)[:30])
+                        with col2:
+                            st.write(f"**{pct:.1f}%**")
+                        st.progress(min(pct / 100, 1.0))
                 else:
                     st.info("Sin datos de genéricas")
             else:
@@ -320,9 +313,9 @@ with tab_ejecutivo:
         except Exception as e:
             st.warning(f"⚠️ Error en genéricas: {str(e)}")
 
-# ──────────────────────────────────────────────────────────────────────────
+# ──────────────────────────────────────────────────────────────────[...]
 # TAB 2: OPERACIONAL
-# ──────────────────────────────────────────────────────────────────────────
+# ──────────────────────────────────────────────────────────────────[...]
 with tab_operacional:
     st.markdown("## Análisis operacional")
     st.divider()
@@ -388,9 +381,9 @@ with tab_operacional:
     except Exception as e:
         st.warning(f"⚠️ No se puede mostrar tabla: {str(e)}")
 
-# ──────────────────────────────────────────────────────────────────────────
+# ──────────────────────────────────────────────────────────────────[...]
 # TAB 3: ANALÍTICO
-# ──────────────────────────────────────────────────────────────────────────
+# ──────────────────────────────────────────────────────────────────[...]
 with tab_analitico:
     st.markdown("## Análisis analítico")
     st.divider()
