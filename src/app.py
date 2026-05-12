@@ -162,13 +162,15 @@ tab_ejecutivo, tab_operacional, tab_analitico = st.tabs(
 )
 
 # ──────────────────────────────────────────────────────────────────[...]
-# TAB 1: EJECUTIVO
+# TAB 1: EJECUTIVO - Rediseñado con Gráficos
 # ──────────────────────────────────────────────────────────────────[...]
 with tab_ejecutivo:
     st.markdown("## Ejecución presupuestal")
     st.divider()
 
-    # KPI Cards
+    # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━[...]
+    # SECCIÓN 1: KPI HEADLINE
+    # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━[...]
     try:
         kpi_data = [
             {
@@ -207,24 +209,98 @@ with tab_ejecutivo:
 
     st.divider()
     
-    # Alertas
-    st.markdown("### ⚠️ Alertas")
-    try:
-        if ind.get("alertas"):
-            panel_alertas(ind["alertas"])
-        else:
-            st.info("✅ Sin alertas")
-    except Exception as e:
-        st.info("ℹ️ Módulo de alertas no disponible")
+    # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━[...]
+    # SECCIÓN 2: GRÁFICO EN CASCADA - Flujo del ciclo presupuestal
+    # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━[...]
+    st.markdown("### 📊 Ciclo presupuestal (Cascada)")
+    col_cascada, col_flujo = st.columns([1.2, 1])
+    
+    with col_cascada:
+        try:
+            e = ind["ejecucion"]
+            fases = ["PIM", "Certificado", "Compromiso", "Devengado", "Girado", "Pagado"]
+            valores = [
+                e["pim_total"],
+                e["certificado_total"],
+                e["compromiso_total"],
+                e["devengado_total"],
+                e["girado_total"],
+                e["pagado_total"]
+            ]
+            
+            fig_cascada = go.Figure(go.Waterfall(
+                name="Ejecución",
+                orientation="v",
+                x=fases,
+                y=valores,
+                text=[f"S/ {v/1e6:.1f}M" for v in valores],
+                textposition="outside",
+                connector={"line": {"color": PALETA.get("border", "#ccc")}},
+                increasing={"marker": {"color": PALETA.get("success", "#2ecc71")}},
+                decreasing={"marker": {"color": PALETA.get("danger", "#e74c3c")}},
+                totals={"marker": {"color": PALETA.get("brand", "#1f77b4")}},
+            ))
+            
+            fig_cascada.update_layout(
+                height=400,
+                margin=dict(l=10, r=10, t=20, b=10),
+                hovermode="x",
+                plot_bgcolor="rgba(240,240,240,0.3)"
+            )
+            
+            st.plotly_chart(fig_cascada, use_container_width=True)
+        except Exception as e:
+            st.warning(f"⚠️ Error en cascada: {str(e)}")
+    
+    with col_flujo:
+        st.markdown("### 📈 Ratios de flujo")
+        try:
+            ef = ind["eficiencia"]
+            
+            ratio_data = [
+                ("Comprom/Certif", ef.get("ratio_compro_certif", 0)),
+                ("Deveng/Comprom", ef.get("ratio_deveng_compro", 0)),
+                ("Girado/Deveng", ef.get("ratio_girado_deveng", 0)),
+                ("Pagado/Girado", ef.get("ratio_pagado_girado", 0)),
+            ]
+            
+            fig_ratios = go.Figure(go.Bar(
+                y=[name for name, _ in ratio_data],
+                x=[val for _, val in ratio_data],
+                orientation="h",
+                marker=dict(
+                    color=[val for _, val in ratio_data],
+                    colorscale="RdYlGn",
+                    cmin=0,
+                    cmax=100,
+                    showscale=False
+                ),
+                text=[f"{val:.1f}%" for _, val in ratio_data],
+                textposition="outside",
+            ))
+            
+            fig_ratios.update_layout(
+                height=400,
+                margin=dict(l=10, r=10, t=20, b=10),
+                xaxis_title="Porcentaje (%)",
+                yaxis_title="",
+                plot_bgcolor="rgba(240,240,240,0.3)"
+            )
+            
+            st.plotly_chart(fig_ratios, use_container_width=True)
+        except Exception as e:
+            st.warning(f"⚠️ Error en ratios: {str(e)}")
 
     st.divider()
-
-    # Gráficos en dos columnas
-    col_curva, col_generica = st.columns([1.2, 1])
+    
+    # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━[...]
+    # SECCIÓN 3: CURVA S + Proyección
+    # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━[...]
+    st.markdown("### 📉 Curva S y Proyección")
+    col_curva, col_proyeccion = st.columns([1.2, 1])
 
     # Columna 1: Curva S
     with col_curva:
-        st.markdown("### 📉 Curva S")
         try:
             # Calcular devengado acumulado
             meses_dev, acum = [], 0
@@ -264,10 +340,11 @@ with tab_ejecutivo:
             ))
             
             fig.update_layout(
-                height=300,
+                height=350,
                 hovermode="x unified",
                 margin=dict(l=10, r=10, t=20, b=10),
-                plot_bgcolor="rgba(240,240,240,0.5)"
+                plot_bgcolor="rgba(240,240,240,0.5)",
+                yaxis_title="S/ (millones)"
             )
             
             st.plotly_chart(fig, use_container_width=True)
@@ -275,43 +352,138 @@ with tab_ejecutivo:
         except Exception as e:
             st.warning(f"⚠️ No se puede mostrar curva S: {str(e)}")
 
-    # Columna 2: Por genérica
-    with col_generica:
-        st.markdown("### 📊 Por genérica (Top 6)")
+    # Columna 2: Proyección y alertas
+    with col_proyeccion:
+        st.markdown("### 🎯 Proyección al cierre")
         try:
-            col_pim = cols.get("pim")
-            col_gen = st.session_state.col_generica
+            proy = ind["proyecciones"]
             
-            # Validar que existan las columnas necesarias
-            if col_pim and col_gen and col_gen in df.columns:
-                genericas = df[col_gen].dropna().unique()[:6]
-                
-                if len(genericas) > 0:
-                    for gen in genericas:
-                        df_g = df[df[col_gen] == gen]
-                        pim_g = df_g[col_pim].sum() if col_pim in df_g.columns else 0
-                        dev_g = sum(
-                            df_g[c].sum()
-                            for c in st.session_state.cols_devengado
-                            if c in df_g.columns
-                        )
-                        pct = (dev_g / pim_g * 100) if pim_g > 0 else 0
-                        color = color_por_avance(pct)
-                        
-                        # Usar componentes nativos de Streamlit en lugar de HTML
-                        col1, col2 = st.columns([3, 1])
-                        with col1:
-                            st.write(str(gen)[:30])
-                        with col2:
-                            st.write(f"**{pct:.1f}%**")
-                        st.progress(min(pct / 100, 1.0))
-                else:
-                    st.info("Sin datos de genéricas")
-            else:
-                st.info("Faltan datos para mostrar genéricas")
-                
+            # Indicadores de proyección
+            col_p1, col_p2 = st.columns(2)
+            with col_p1:
+                st.metric(
+                    "Proyección cierre",
+                    f"{proy['proyeccion_pct']:.1f}%",
+                    delta=f"{proy['proyeccion_pct'] - 50:.1f}pp",
+                    delta_color="inverse" if proy['proyeccion_pct'] < 80 else "normal"
+                )
+            with col_p2:
+                st.metric(
+                    "Brecha proyectada",
+                    f"S/ {proy['brecha_proyectada']/1e6:.1f}M",
+                    delta=f"{proy['dias_restantes_fiscal']} días"
+                )
+            
+            # Gauge de proyección
+            fig_gauge = go.Figure(go.Indicator(
+                mode="gauge+number+delta",
+                value=proy['proyeccion_pct'],
+                title={"text": "Meta: 100%"},
+                delta={"reference": 100, "suffix": "pp"},
+                gauge={
+                    "axis": {"range": [0, 100]},
+                    "bar": {"color": color_por_avance(proy['proyeccion_pct'])},
+                    "steps": [
+                        {"range": [0, 60], "color": "rgba(255, 0, 0, 0.1)"},
+                        {"range": [60, 80], "color": "rgba(255, 165, 0, 0.1)"},
+                        {"range": [80, 100], "color": "rgba(0, 255, 0, 0.1)"}
+                    ],
+                    "threshold": {
+                        "line": {"color": "red", "width": 4},
+                        "thickness": 0.75,
+                        "value": 80
+                    }
+                }
+            ))
+            
+            fig_gauge.update_layout(height=300)
+            st.plotly_chart(fig_gauge, use_container_width=True)
+            
         except Exception as e:
-            st.warning(f"⚠️ Error en genéricas: {str(e)}")
+            st.warning(f"⚠️ Error en proyección: {str(e)}")
+
+    st.divider()
+    
+    # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━[...]
+    # SECCIÓN 4: DISTRIBUCIÓN POR GENÉRICA
+    # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━[...]
+    st.markdown("### 💰 Distribución por genérica (Top 8)")
+    try:
+        col_pim = cols.get("pim")
+        col_gen = st.session_state.col_generica
+        
+        if col_pim and col_gen and col_gen in df.columns:
+            genericas = df[col_gen].dropna().unique()[:8]
+            
+            if len(genericas) > 0:
+                gen_data = []
+                for gen in genericas:
+                    df_g = df[df[col_gen] == gen]
+                    pim_g = df_g[col_pim].sum() if col_pim in df_g.columns else 0
+                    dev_g = sum(
+                        df_g[c].sum()
+                        for c in st.session_state.cols_devengado
+                        if c in df_g.columns
+                    )
+                    pct = (dev_g / pim_g * 100) if pim_g > 0 else 0
+                    gen_data.append({
+                        "generica": str(gen)[:35],
+                        "pim": pim_g,
+                        "devengado": dev_g,
+                        "pct": pct
+                    })
+                
+                gen_df = pd.DataFrame(gen_data).sort_values("pim", ascending=True)
+                
+                fig_gen = go.Figure()
+                
+                fig_gen.add_trace(go.Bar(
+                    y=gen_df["generica"],
+                    x=gen_df["devengado"],
+                    name="Devengado",
+                    marker=dict(color=PALETA.get("success", "#2ecc71")),
+                    orientation="h"
+                ))
+                
+                fig_gen.add_trace(go.Bar(
+                    y=gen_df["generica"],
+                    x=gen_df["pim"] - gen_df["devengado"],
+                    name="Pendiente",
+                    marker=dict(color=PALETA.get("light_gray", "#ecf0f1")),
+                    orientation="h"
+                ))
+                
+                fig_gen.update_layout(
+                    barmode="stack",
+                    height=350,
+                    margin=dict(l=150, r=10, t=20, b=10),
+                    xaxis_title="S/ (millones)",
+                    hovermode="y",
+                    plot_bgcolor="rgba(240,240,240,0.3)"
+                )
+                
+                st.plotly_chart(fig_gen, use_container_width=True)
+            else:
+                st.info("Sin datos de genéricas")
+        else:
+            st.info("Faltan datos para mostrar genéricas")
+            
+    except Exception as e:
+        st.warning(f"⚠️ Error en distribución: {str(e)}")
+
+    st.divider()
+
+    # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━[...]
+    # SECCIÓN 5: ALERTAS
+    # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━[...]
+    st.markdown("### ⚠️ Alertas y riesgos")
+    try:
+        if ind.get("alertas"):
+            panel_alertas(ind["alertas"])
+        else:
+            st.info("✅ Sin alertas")
+    except Exception as e:
+        st.info("ℹ️ Módulo de alertas no disponible")
 
 # ──────────────────────────────────────────────────────────────────[...]
 # TAB 2: OPERACIONAL
